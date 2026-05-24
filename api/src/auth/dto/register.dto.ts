@@ -6,12 +6,12 @@ export class RegisterDto {
   @IsString()
   @MinLength(3)
   @MaxLength(150)
-  username: string;
+  username!: string;
 
   @ApiProperty({ example: 'S3cure!Pass', minLength: 8 })
   @IsString()
   @MinLength(8)
-  password: string;
+  password!: string;
 
   @ApiPropertyOptional({ example: 'alice@example.com' })
   @IsEmail()

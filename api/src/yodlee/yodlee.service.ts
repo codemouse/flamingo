@@ -68,7 +68,8 @@ export class YodleeService {
       this.logger.debug(`Token acquired for loginName: ${loginName}`);
       return accessToken;
     } catch (err) {
-      this.logger.error(`Failed to obtain Yodlee token for ${loginName}`, err?.response?.data ?? err.message);
+      const e = err as { response?: { data?: unknown }; message?: string };
+      this.logger.error(`Failed to obtain Yodlee token for ${loginName}`, e?.response?.data ?? e.message);
       throw new InternalServerErrorException('Failed to obtain Yodlee access token');
     }
   }
@@ -137,9 +138,10 @@ export class YodleeService {
       this.logger.debug(`Yodlee user created: ${loginName}`);
       return loginName;
     } catch (err) {
+      const e = err as { response?: { data?: unknown }; message?: string };
       this.logger.error(
         `Failed to create Yodlee user ${loginName}`,
-        err?.response?.data ?? err.message,
+        e?.response?.data ?? e.message,
       );
       throw new InternalServerErrorException('Failed to create Yodlee user');
     }

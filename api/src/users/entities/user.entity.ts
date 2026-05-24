@@ -14,26 +14,26 @@ export enum Role {
 @Entity('users')
 export class User {
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  declare id: string;
 
   @Column({ length: 150, unique: true })
-  username: string;
+  declare username: string;
 
   @Column({ type: 'varchar', nullable: true, default: null })
-  email: string | null;
+  declare email: string | null;
 
   @Column({ name: 'password_hash' })
-  passwordHash: string;
+  declare passwordHash: string;
 
   @Column({ type: 'enum', enum: Role, default: Role.USER })
-  role: Role;
+  declare role: Role;
 
   @Column({ name: 'yodlee_login_name', type: 'varchar', nullable: true, default: null })
-  yodleeLoginName: string | null;
+  declare yodleeLoginName: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  declare createdAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  declare updatedAt: Date;
 }

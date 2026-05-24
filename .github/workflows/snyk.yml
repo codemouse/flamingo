@@ -1,0 +1,57 @@
+name: Snyk Security Scan
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+  security-events: write   # needed to upload SARIF results
+
+jobs:
+  snyk:
+    name: Snyk vulnerability scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # ── Test: fail the build on high/critical vulns ──────────────────────
+      - name: Snyk test (all workspaces)
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          # --all-projects scans every workspace package.json
+          # --severity-threshold=high fails only on high/critical
+          args: --all-projects --severity-threshold=high
+
+      # ── Monitor: upload snapshot to Snyk dashboard (main branch only) ───
+      - name: Snyk monitor (main branch)
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: monitor
+          args: --all-projects --org=flamingo
+
+      # ── SARIF upload: surfaces findings in GitHub Security tab ───────────
+      - name: Upload Snyk SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk.sarif
+        continue-on-error: true   # SARIF file only exists when snyk outputs it

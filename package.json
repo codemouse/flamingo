@@ -1,0 +1,24 @@
+{
+  "name": "flamingo",
+  "private": true,
+  "workspaces": [
+    "api",
+    "web",
+    "admin-web"
+  ],
+  "scripts": {
+    "dev": "concurrently --names \"api,web,admin-web\" --prefix-colors \"cyan,magenta,yellow\" \"npm run api\" \"npm run web\" \"npm run admin-web\"",
+    "api": "npm run start:dev --workspace=api",
+    "web": "npm run dev --workspace=web",
+    "admin-web": "npm run dev --workspace=admin-web",
+    "api:build": "npm run build --workspace=api",
+    "web:build": "npm run build --workspace=web",
+    "admin-web:build": "npm run build --workspace=admin-web",
+    "snyk:test": "snyk test --all-projects --severity-threshold=high",
+    "snyk:monitor": "snyk monitor --all-projects --org=flamingo"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "snyk": "^1.1305.0"
+  }
+}

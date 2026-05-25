@@ -1,47 +1,28 @@
-import type { YodleeAccount } from '../types/yodlee';
-
-const fmt = (amount: number, currency = 'USD') =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
-
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-function containerIcon(container: string, accountType: string) {
-  if (container === 'creditCard') return '💳';
-  if (accountType === 'SAVINGS') return '🏦';
-  if (accountType === 'CHECKING') return '🏧';
-  if (container === 'investment') return '📈';
-  return '🏦';
-}
-
-function containerLabel(container: string, accountType: string) {
-  if (container === 'creditCard') return 'Credit Card';
-  if (accountType === 'SAVINGS') return 'Savings';
-  if (accountType === 'CHECKING') return 'Checking';
-  return accountType || container;
-}
+import type { YodleeAccount } from "../types/yodlee";
+import { fmt, fmtDate, containerIcon, containerLabel } from "../utils/format";
 
 interface Props {
   account: YodleeAccount;
 }
 
 export function AccountCard({ account }: Props) {
-  const isCreditCard = account.CONTAINER === 'creditCard';
+  const isCreditCard = account.container === "creditCard";
   const utilization =
     isCreditCard && account.totalCreditLine?.amount
       ? (account.balance.amount / account.totalCreditLine.amount) * 100
       : null;
 
   return (
-    <div className={`account-card account-card--${account.CONTAINER}`}>
+    <div className={`account-card account-card--${account.container}`}>
       <div className="account-card-header">
         <span className="account-card-icon">
-          {containerIcon(account.CONTAINER, account.accountType)}
+          {containerIcon(account.container, account.accountType)}
         </span>
         <div className="account-card-meta">
           <span className="account-card-name">{account.accountName}</span>
           <span className="account-card-type">
-            {containerLabel(account.CONTAINER, account.accountType)} · {account.accountNumber}
+            {containerLabel(account.container, account.accountType)} ·{" "}
+            {account.accountNumber}
           </span>
         </div>
         <span className="account-card-provider">{account.providerName}</span>
@@ -49,9 +30,11 @@ export function AccountCard({ account }: Props) {
 
       <div className="account-card-balance">
         <span className="account-card-balance-label">
-          {isCreditCard ? 'Balance Owed' : 'Current Balance'}
+          {isCreditCard ? "Balance Owed" : "Current Balance"}
         </span>
-        <span className={`account-card-balance-amount ${isCreditCard ? 'negative' : 'positive'}`}>
+        <span
+          className={`account-card-balance-amount ${isCreditCard ? "negative" : "positive"}`}
+        >
           {fmt(account.balance.amount, account.balance.currency)}
         </span>
       </div>
@@ -64,17 +47,27 @@ export function AccountCard({ account }: Props) {
           </div>
           <div className="credit-bar">
             <div
-              className={`credit-bar-fill ${utilization > 70 ? 'high' : utilization > 30 ? 'mid' : 'low'}`}
+              className={`credit-bar-fill ${utilization > 70 ? "high" : utilization > 30 ? "mid" : "low"}`}
               style={{ width: `${Math.min(utilization, 100)}%` }}
             />
           </div>
           <div className="credit-row credit-row--small">
             <span className="credit-label">Available Credit</span>
-            <span>{fmt(account.availableCredit?.amount ?? 0, account.balance.currency)}</span>
+            <span>
+              {fmt(
+                account.availableCredit?.amount ?? 0,
+                account.balance.currency,
+              )}
+            </span>
           </div>
           <div className="credit-row credit-row--small">
             <span className="credit-label">Credit Limit</span>
-            <span>{fmt(account.totalCreditLine?.amount ?? 0, account.balance.currency)}</span>
+            <span>
+              {fmt(
+                account.totalCreditLine?.amount ?? 0,
+                account.balance.currency,
+              )}
+            </span>
           </div>
           {account.apr != null && (
             <div className="credit-row credit-row--small">

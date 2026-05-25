@@ -1,11 +1,17 @@
-import type { YodleeAccount } from '../types/yodlee';
-import { AccountCard } from './AccountCard';
+import type { YodleeAccount } from "../types/yodlee";
+import { AccountCard } from "./AccountCard";
 
 interface Props {
   accounts: YodleeAccount[];
 }
 
-function Section({ title, accounts }: { title: string; accounts: YodleeAccount[] }) {
+function Section({
+  title,
+  accounts,
+}: {
+  title: string;
+  accounts: YodleeAccount[];
+}) {
   if (accounts.length === 0) return null;
   return (
     <div className="accounts-section">
@@ -20,10 +26,10 @@ function Section({ title, accounts }: { title: string; accounts: YodleeAccount[]
 }
 
 export function AccountsGrid({ accounts }: Props) {
-  const bankAccounts = accounts.filter((a) => a.CONTAINER === 'bank');
-  const creditCards = accounts.filter((a) => a.CONTAINER === 'creditCard');
+  const bankAccounts = accounts.filter((a) => a.container === "bank");
+  const creditCards = accounts.filter((a) => a.container === "creditCard");
   const others = accounts.filter(
-    (a) => a.CONTAINER !== 'bank' && a.CONTAINER !== 'creditCard',
+    (a) => a.container !== "bank" && a.container !== "creditCard",
   );
 
   return (

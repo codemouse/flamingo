@@ -1,30 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
-import type { YodleeAccount } from '../types/yodlee';
+import { useState, useEffect, useRef } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { YodleeAccount } from "../types/yodlee";
 import {
   updateMyAccount,
   deleteMyAccount,
   getMyFastLinkToken,
-} from '../api/yodlee';
-
-// ── helpers shared with AccountCard ────────────────────────────────────────
-
-const fmt = (amount: number, currency = 'USD') =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
-
-function containerLabel(container: string, accountType: string) {
-  if (container === 'creditCard') return 'Credit Card';
-  if (accountType === 'SAVINGS') return 'Savings';
-  if (accountType === 'CHECKING') return 'Checking';
-  return accountType || container;
-}
-
-function containerIcon(container: string, accountType: string) {
-  if (container === 'creditCard') return '💳';
-  if (accountType === 'SAVINGS') return '🏦';
-  if (accountType === 'CHECKING') return '🏧';
-  if (container === 'investment') return '📈';
-  return '🏦';
-}
+} from "../api/yodlee";
+import { fmt, containerIcon, containerLabel } from "../utils/format";
 
 // ── FastLink modal ──────────────────────────────────────────────────────────
 
@@ -35,7 +17,7 @@ interface FastLinkModalProps {
 
 function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const closedRef = useRef(false);
 
   useEffect(() => {
@@ -47,12 +29,15 @@ function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
 
         const loadScript = (): Promise<void> =>
           new Promise((resolve, reject) => {
-            if ((window as { fastlink?: unknown }).fastlink) { resolve(); return; }
-            const s = document.createElement('script');
-            s.src = 'https://cdn.yodlee.com/fastlink/v4/initialize.js';
+            if ((window as { fastlink?: unknown }).fastlink) {
+              resolve();
+              return;
+            }
+            const s = document.createElement("script");
+            s.src = "https://cdn.yodlee.com/fastlink/v4/initialize.js";
             s.async = true;
             s.onload = () => resolve();
-            s.onerror = () => reject(new Error('Failed to load FastLink SDK'));
+            s.onerror = () => reject(new Error("Failed to load FastLink SDK"));
             document.head.appendChild(s);
           });
 
@@ -60,32 +45,45 @@ function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
           .then(() => {
             if (closedRef.current) return;
             setLoading(false);
-            (window as { fastlink?: { open: (cfg: unknown, id: string) => void } }).fastlink?.open(
+            (
+              window as {
+                fastlink?: { open: (cfg: unknown, id: string) => void };
+              }
+            ).fastlink?.open(
               {
                 fastLinkURL: fastLinkUrl,
                 accessToken: `Bearer ${accessToken}`,
-                params: { configName: 'Aggregation' },
-                onSuccess: () => { if (!closedRef.current) onSuccess(); },
-                onError: (err: unknown) => {
-                  console.error('FastLink error', err);
-                  if (!closedRef.current) setError('FastLink encountered an error. Please try again.');
+                params: { configName: "Aggregation" },
+                onSuccess: () => {
+                  if (!closedRef.current) onSuccess();
                 },
-                onClose: () => { if (!closedRef.current) onClose(); },
+                onError: (err: unknown) => {
+                  console.error("FastLink error", err);
+                  if (!closedRef.current)
+                    setError(
+                      "FastLink encountered an error. Please try again.",
+                    );
+                },
+                onClose: () => {
+                  if (!closedRef.current) onClose();
+                },
                 onEvent: () => {},
               },
-              'yodlee-fastlink-container',
+              "yodlee-fastlink-container",
             );
           })
           .catch(() => {
             if (!closedRef.current) {
-              setError('Failed to load the bank connection widget.');
+              setError("Failed to load the bank connection widget.");
               setLoading(false);
             }
           });
       })
       .catch(() => {
         if (!closedRef.current) {
-          setError('Failed to get connection token. Make sure you are logged in.');
+          setError(
+            "Failed to get connection token. Make sure you are logged in.",
+          );
           setLoading(false);
         }
       });
@@ -94,7 +92,9 @@ function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
       closedRef.current = true;
       try {
         (window as { fastlink?: { close: () => void } }).fastlink?.close();
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
   }, [onClose, onSuccess]);
 
@@ -103,7 +103,9 @@ function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 className="modal-title">Connect a Bank</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+          <button className="modal-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
         </div>
 
         {loading && !error && (
@@ -114,10 +116,15 @@ function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
         )}
 
         {error && (
-          <div className="alert alert-error" style={{ margin: '1rem' }}>{error}</div>
+          <div className="alert alert-error" style={{ margin: "1rem" }}>
+            {error}
+          </div>
         )}
 
-        <div id="yodlee-fastlink-container" style={{ minHeight: loading ? 0 : 580 }} />
+        <div
+          id="yodlee-fastlink-container"
+          style={{ minHeight: loading ? 0 : 580 }}
+        />
       </div>
     </div>
   );
@@ -127,69 +134,69 @@ function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
 
 interface Props {
   accounts: YodleeAccount[];
-  onRefresh: () => void;
 }
 
-export function AccountsManager({ accounts, onRefresh }: Props) {
+export function AccountsManager({ accounts }: Props) {
+  const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState('');
+  const [editValue, setEditValue] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [showFastLink, setShowFastLink] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, nickname }: { id: number; nickname: string }) =>
+      updateMyAccount(id, { nickname }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      setEditingId(null);
+      setEditValue("");
+      setError("");
+    },
+    onError: () => setError("Failed to update account name."),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (accountId: number) => deleteMyAccount(accountId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      setDeletingId(null);
+      setError("");
+    },
+    onError: () => setError("Failed to delete account."),
+  });
 
   const startEdit = (a: YodleeAccount) => {
     setEditingId(a.id);
     setEditValue(a.accountName);
     setDeletingId(null);
-    setError('');
+    setError("");
   };
 
   const cancelEdit = () => {
     setEditingId(null);
-    setEditValue('');
+    setEditValue("");
   };
 
-  const saveEdit = async () => {
+  const saveEdit = () => {
     if (editingId == null || !editValue.trim()) return;
-    setSaving(true);
-    setError('');
-    try {
-      await updateMyAccount(editingId, { nickname: editValue.trim() });
-      setEditingId(null);
-      onRefresh();
-    } catch {
-      setError('Failed to update account name.');
-    } finally {
-      setSaving(false);
-    }
+    updateMutation.mutate({ id: editingId, nickname: editValue.trim() });
   };
 
   const startDelete = (id: number) => {
     setDeletingId(id);
     setEditingId(null);
-    setError('');
+    setError("");
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = () => {
     if (deletingId == null) return;
-    setDeleting(true);
-    setError('');
-    try {
-      await deleteMyAccount(deletingId);
-      setDeletingId(null);
-      onRefresh();
-    } catch {
-      setError('Failed to delete account.');
-    } finally {
-      setDeleting(false);
-    }
+    deleteMutation.mutate(deletingId);
   };
 
   const handleFastLinkSuccess = () => {
     setShowFastLink(false);
-    onRefresh();
+    void queryClient.invalidateQueries({ queryKey: ["accounts"] });
   };
 
   return (
@@ -199,17 +206,24 @@ export function AccountsManager({ accounts, onRefresh }: Props) {
           <span className="section-title">Manage Accounts</span>
           {error && <span className="acct-mgr-error">{error}</span>}
         </div>
-        <button className="btn btn-primary" onClick={() => setShowFastLink(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => setShowFastLink(true)}
+        >
           + Connect a Bank
         </button>
       </div>
 
       {accounts.length === 0 ? (
         <div className="acct-mgr-empty">
-          No accounts connected yet.{' '}
-          <button className="link" style={{ background: 'none', border: 'none', padding: 0 }} onClick={() => setShowFastLink(true)}>
+          No accounts connected yet.{" "}
+          <button
+            className="link"
+            style={{ background: "none", border: "none", padding: 0 }}
+            onClick={() => setShowFastLink(true)}
+          >
             Connect a bank
-          </button>{' '}
+          </button>{" "}
           to get started.
         </div>
       ) : (
@@ -226,11 +240,16 @@ export function AccountsManager({ accounts, onRefresh }: Props) {
             </thead>
             <tbody>
               {accounts.map((a) => (
-                <tr key={a.id} className={deletingId === a.id ? 'acct-mgr-row--deleting' : ''}>
+                <tr
+                  key={a.id}
+                  className={
+                    deletingId === a.id ? "acct-mgr-row--deleting" : ""
+                  }
+                >
                   {/* Account name cell */}
                   <td className="acct-mgr-name-cell">
                     <span className="acct-mgr-icon">
-                      {containerIcon(a.CONTAINER, a.accountType)}
+                      {containerIcon(a.container, a.accountType)}
                     </span>
                     {editingId === a.id ? (
                       <div className="acct-mgr-edit-row">
@@ -239,22 +258,24 @@ export function AccountsManager({ accounts, onRefresh }: Props) {
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') saveEdit();
-                            if (e.key === 'Escape') cancelEdit();
+                            if (e.key === "Enter") saveEdit();
+                            if (e.key === "Escape") cancelEdit();
                           }}
                           autoFocus
                         />
                         <button
                           className="btn btn-primary acct-mgr-btn-sm"
                           onClick={saveEdit}
-                          disabled={saving || !editValue.trim()}
+                          disabled={
+                            updateMutation.isPending || !editValue.trim()
+                          }
                         >
-                          {saving ? '…' : 'Save'}
+                          {updateMutation.isPending ? "…" : "Save"}
                         </button>
                         <button
                           className="btn btn-ghost acct-mgr-btn-sm"
                           onClick={cancelEdit}
-                          disabled={saving}
+                          disabled={updateMutation.isPending}
                         >
                           Cancel
                         </button>
@@ -266,14 +287,19 @@ export function AccountsManager({ accounts, onRefresh }: Props) {
 
                   {/* Type */}
                   <td className="acct-mgr-meta">
-                    {containerLabel(a.CONTAINER, a.accountType)}
+                    {containerLabel(a.container, a.accountType)}
                     {a.accountNumber && (
-                      <span className="acct-mgr-number"> ···{a.accountNumber.slice(-4)}</span>
+                      <span className="acct-mgr-number">
+                        {" "}
+                        ···{a.accountNumber.slice(-4)}
+                      </span>
                     )}
                   </td>
 
                   {/* Balance */}
-                  <td className={`acct-mgr-balance ${a.isAsset ? 'positive' : 'negative'}`}>
+                  <td
+                    className={`acct-mgr-balance ${a.isAsset ? "positive" : "negative"}`}
+                  >
                     {fmt(a.balance.amount, a.balance.currency)}
                   </td>
 
@@ -288,14 +314,14 @@ export function AccountsManager({ accounts, onRefresh }: Props) {
                         <button
                           className="btn btn-danger acct-mgr-btn-sm"
                           onClick={confirmDelete}
-                          disabled={deleting}
+                          disabled={deleteMutation.isPending}
                         >
-                          {deleting ? '…' : 'Yes, delete'}
+                          {deleteMutation.isPending ? "…" : "Yes, delete"}
                         </button>
                         <button
                           className="btn btn-ghost acct-mgr-btn-sm"
                           onClick={() => setDeletingId(null)}
-                          disabled={deleting}
+                          disabled={deleteMutation.isPending}
                         >
                           Cancel
                         </button>

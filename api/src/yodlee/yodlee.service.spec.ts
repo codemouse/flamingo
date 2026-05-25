@@ -1,6 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { InternalServerErrorException } from '@nestjs/common';
+import {
+  InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
+  HttpException,
+} from '@nestjs/common';
 import axios from 'axios';
 import { YodleeService } from './yodlee.service';
 
@@ -40,7 +45,9 @@ describe('YodleeService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    mockedAxios.create.mockReturnValue(mockHttp as unknown as ReturnType<typeof axios.create>);
+    mockedAxios.create.mockReturnValue(
+      mockHttp as unknown as ReturnType<typeof axios.create>,
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,15 +73,24 @@ describe('YodleeService', () => {
     });
 
     it('falls back to the default sandbox URL when not configured', async () => {
-      mockedAxios.create.mockReturnValue(mockHttp as unknown as ReturnType<typeof axios.create>);
+      mockedAxios.create.mockReturnValue(
+        mockHttp as unknown as ReturnType<typeof axios.create>,
+      );
       const module = await Test.createTestingModule({
         providers: [
           YodleeService,
-          { provide: ConfigService, useValue: makeConfig({ YODLEE_FASTLINK_URL: undefined as unknown as string }) },
+          {
+            provide: ConfigService,
+            useValue: makeConfig({
+              YODLEE_FASTLINK_URL: undefined as unknown as string,
+            }),
+          },
         ],
       }).compile();
       const svc = module.get<YodleeService>(YodleeService);
-      expect(svc.fastLinkUrl).toBe('https://node.sandbox.yodlee.com/authenticate/restserver/');
+      expect(svc.fastLinkUrl).toBe(
+        'https://node.sandbox.yodlee.com/authenticate/restserver/',
+      );
     });
   });
 
@@ -87,11 +103,16 @@ describe('YodleeService', () => {
     });
 
     it('throws when the pool env var is empty', async () => {
-      mockedAxios.create.mockReturnValue(mockHttp as unknown as ReturnType<typeof axios.create>);
+      mockedAxios.create.mockReturnValue(
+        mockHttp as unknown as ReturnType<typeof axios.create>,
+      );
       const module = await Test.createTestingModule({
         providers: [
           YodleeService,
-          { provide: ConfigService, useValue: makeConfig({ YODLEE_SANDBOX_USER_POOL: '' }) },
+          {
+            provide: ConfigService,
+            useValue: makeConfig({ YODLEE_SANDBOX_USER_POOL: '' }),
+          },
         ],
       }).compile();
       const svc = module.get<YodleeService>(YodleeService);
@@ -102,7 +123,9 @@ describe('YodleeService', () => {
   // ── getAccessToken ────────────────────────────────────────────────────────
 
   describe('getAccessToken', () => {
-    const tokenResponse = { data: { token: { accessToken: 'tok-abc', expiresIn: 1800 } } };
+    const tokenResponse = {
+      data: { token: { accessToken: 'tok-abc', expiresIn: 1800 } },
+    };
 
     it('fetches a new token and returns it', async () => {
       mockHttp.post.mockResolvedValue(tokenResponse);
@@ -113,7 +136,9 @@ describe('YodleeService', () => {
       expect(mockHttp.post).toHaveBeenCalledWith(
         '/auth/token',
         expect.any(String),
-        expect.objectContaining({ headers: expect.objectContaining({ loginName: 'sbMem1' }) }),
+        expect.objectContaining({
+          headers: expect.objectContaining({ loginName: 'sbMem1' }),
+        }),
       );
     });
 
@@ -146,8 +171,12 @@ describe('YodleeService', () => {
   // ── getAccounts ───────────────────────────────────────────────────────────
 
   describe('getAccounts', () => {
-    it('calls /accounts with the user bearer token', async () => {
-      mockHttp.post.mockResolvedValue({ data: { token: { accessToken: 'tok', expiresIn: 1800 } } });
+    const tokenMock = {
+      data: { token: { accessToken: 'tok', expiresIn: 1800 } },
+    };
+
+    it('returns an empty array when Yodlee returns no accounts', async () => {
+      mockHttp.post.mockResolvedValue(tokenMock);
       mockHttp.get.mockResolvedValue({ data: { account: [] } });
 
       const result = await service.getAccounts('sbMem1');
@@ -158,11 +187,39 @@ describe('YodleeService', () => {
           headers: expect.objectContaining({ Authorization: 'Bearer tok' }),
         }),
       );
-      expect(result).toEqual({ account: [] });
+      expect(result).toEqual([]);
+    });
+
+    it('normalizes CONTAINER to lowercase container', async () => {
+      mockHttp.post.mockResolvedValue(tokenMock);
+      mockHttp.get.mockResolvedValue({
+        data: {
+          account: [
+            {
+              CONTAINER: 'bank',
+              id: 1,
+              accountName: 'Checking',
+              accountStatus: 'ACTIVE',
+              accountNumber: 'xxxx1234',
+              accountType: 'CHECKING',
+              providerName: 'Test Bank',
+              balance: { currency: 'USD', amount: 1000 },
+              isAsset: true,
+              lastUpdated: '2024-01-01T00:00:00Z',
+            },
+          ],
+        },
+      });
+
+      const result = await service.getAccounts('sbMem1');
+
+      expect(result).toHaveLength(1);
+      expect(result[0].container).toBe('bank');
+      expect((result[0] as Record<string, unknown>).CONTAINER).toBeUndefined();
     });
 
     it('forwards optional query params', async () => {
-      mockHttp.post.mockResolvedValue({ data: { token: { accessToken: 'tok', expiresIn: 1800 } } });
+      mockHttp.post.mockResolvedValue(tokenMock);
       mockHttp.get.mockResolvedValue({ data: { account: [] } });
 
       await service.getAccounts('sbMem1', { accountType: 'bank' });
@@ -172,21 +229,59 @@ describe('YodleeService', () => {
         expect.objectContaining({ params: { accountType: 'bank' } }),
       );
     });
+
+    it('throws NotFoundException when Yodlee returns 404', async () => {
+      mockHttp.post.mockResolvedValue(tokenMock);
+      mockHttp.get.mockRejectedValue({ response: { status: 404, data: {} } });
+      await expect(service.getAccounts('sbMem1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('throws UnauthorizedException when Yodlee returns 401', async () => {
+      mockHttp.post.mockResolvedValue(tokenMock);
+      mockHttp.get.mockRejectedValue({ response: { status: 401, data: {} } });
+      await expect(service.getAccounts('sbMem1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('throws HttpException(429) when Yodlee returns 429', async () => {
+      mockHttp.post.mockResolvedValue(tokenMock);
+      mockHttp.get.mockRejectedValue({ response: { status: 429, data: {} } });
+      await expect(service.getAccounts('sbMem1')).rejects.toThrow(
+        HttpException,
+      );
+    });
+
+    it('throws InternalServerErrorException for unexpected errors', async () => {
+      mockHttp.post.mockResolvedValue(tokenMock);
+      mockHttp.get.mockRejectedValue(new Error('network error'));
+      await expect(service.getAccounts('sbMem1')).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
   });
 
   // ── updateAccount ─────────────────────────────────────────────────────────
 
   describe('updateAccount', () => {
     it('sends a PUT request to /accounts/:id with the payload', async () => {
-      mockHttp.post.mockResolvedValue({ data: { token: { accessToken: 'tok', expiresIn: 1800 } } });
+      mockHttp.post.mockResolvedValue({
+        data: { token: { accessToken: 'tok', expiresIn: 1800 } },
+      });
       mockHttp.put.mockResolvedValue({ data: {} });
 
-      await service.updateAccount('sbMem1', 12345, { account: { nickname: 'My Savings' } });
+      await service.updateAccount('sbMem1', 12345, {
+        account: { nickname: 'My Savings' },
+      });
 
       expect(mockHttp.put).toHaveBeenCalledWith(
         '/accounts/12345',
         { account: { nickname: 'My Savings' } },
-        expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer tok' }) }),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer tok' }),
+        }),
       );
     });
   });
@@ -195,14 +290,18 @@ describe('YodleeService', () => {
 
   describe('deleteAccount', () => {
     it('sends a DELETE request to /accounts/:id', async () => {
-      mockHttp.post.mockResolvedValue({ data: { token: { accessToken: 'tok', expiresIn: 1800 } } });
+      mockHttp.post.mockResolvedValue({
+        data: { token: { accessToken: 'tok', expiresIn: 1800 } },
+      });
       mockHttp.delete.mockResolvedValue({});
 
       await service.deleteAccount('sbMem1', 99999);
 
       expect(mockHttp.delete).toHaveBeenCalledWith(
         '/accounts/99999',
-        expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer tok' }) }),
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer tok' }),
+        }),
       );
     });
   });

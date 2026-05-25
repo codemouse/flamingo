@@ -1,7 +1,5 @@
-import type { YodleeAccount } from '../types/yodlee';
-
-const fmt = (amount: number, currency = 'USD') =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
+import type { YodleeAccount } from "../types/yodlee";
+import { fmt } from "../utils/format";
 
 interface Props {
   accounts: YodleeAccount[];
@@ -20,7 +18,9 @@ export function NetWorthBanner({ accounts }: Props) {
     <div className="net-worth-banner">
       <div className="net-worth-main">
         <span className="net-worth-label">Net Worth</span>
-        <span className={`net-worth-value ${netWorth >= 0 ? 'positive' : 'negative'}`}>
+        <span
+          className={`net-worth-value ${netWorth >= 0 ? "positive" : "negative"}`}
+        >
           {fmt(netWorth)}
         </span>
       </div>

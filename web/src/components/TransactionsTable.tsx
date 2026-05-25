@@ -1,14 +1,5 @@
-import type { YodleeTransaction } from '../types/yodlee';
-
-const fmt = (amount: number, currency = 'USD') =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount);
-
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+import type { YodleeTransaction } from "../types/yodlee";
+import { fmt, fmtDate } from "../utils/format";
 
 interface Props {
   transactions: YodleeTransaction[];
@@ -46,12 +37,12 @@ export function TransactionsTable({ transactions, loading }: Props) {
             </thead>
             <tbody>
               {transactions.map((t) => {
-                const isCredit = t.type === 'CREDIT';
+                const isCredit = t.type === "CREDIT";
                 const desc =
                   t.merchant?.name ??
                   t.description?.consumer ??
                   t.description?.original ??
-                  '—';
+                  "—";
                 return (
                   <tr key={t.id}>
                     <td className="txn-date">{fmtDate(t.transactionDate)}</td>
@@ -61,13 +52,17 @@ export function TransactionsTable({ transactions, loading }: Props) {
                         <span className="txn-category">{t.category}</span>
                       )}
                     </td>
-                    <td className={`txn-amount text-right ${isCredit ? 'positive' : 'negative'}`}>
-                      {isCredit ? '+' : '-'}
+                    <td
+                      className={`txn-amount text-right ${isCredit ? "positive" : "negative"}`}
+                    >
+                      {isCredit ? "+" : "-"}
                       {fmt(t.amount.amount, t.amount.currency)}
                     </td>
                     <td>
-                      <span className={`txn-status txn-status--${(t.status ?? '').toLowerCase()}`}>
-                        {t.status ?? '—'}
+                      <span
+                        className={`txn-status txn-status--${(t.status ?? "").toLowerCase()}`}
+                      >
+                        {t.status ?? "—"}
                       </span>
                     </td>
                   </tr>

@@ -5,7 +5,7 @@ export interface YodleeAmount {
 
 export interface YodleeAccount {
   id: number;
-  CONTAINER: 'bank' | 'creditCard' | 'investment' | 'loan' | string;
+  container: "bank" | "creditCard" | "investment" | "loan" | string;
   accountName: string;
   accountStatus: string;
   accountNumber: string;
@@ -36,7 +36,7 @@ export interface YodleeTransaction {
   transactionDate: string;
   postDate?: string;
   accountId: number;
-  type?: 'CREDIT' | 'DEBIT';
+  type?: "CREDIT" | "DEBIT";
   status?: string;
   merchant?: { name?: string };
 }

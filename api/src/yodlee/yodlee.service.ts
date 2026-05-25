@@ -1,6 +1,20 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  NotFoundException,
+  UnauthorizedException,
+  ConflictException,
+  HttpException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios, { AxiosInstance } from 'axios';
+import type {
+  RawYodleeAccount,
+  RawYodleeTransaction,
+  AccountDto,
+  TransactionDto,
+} from './types/yodlee.types.js';
 
 interface CachedToken {
   accessToken: string;
@@ -48,17 +62,16 @@ export class YodleeService {
     });
 
     try {
-      const { data } = await this.http.post('/auth/token', body.toString(), {
+      const { data } = await this.http.post<{
+        token: { accessToken: string; expiresIn: number };
+      }>('/auth/token', body.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           loginName,
         },
       });
 
-      const { accessToken, expiresIn } = data.token as {
-        accessToken: string;
-        expiresIn: number;
-      };
+      const { accessToken, expiresIn } = data.token;
 
       this.tokenCache.set(loginName, {
         accessToken,
@@ -69,8 +82,13 @@ export class YodleeService {
       return accessToken;
     } catch (err) {
       const e = err as { response?: { data?: unknown }; message?: string };
-      this.logger.error(`Failed to obtain Yodlee token for ${loginName}`, e?.response?.data ?? e.message);
-      throw new InternalServerErrorException('Failed to obtain Yodlee access token');
+      this.logger.error(
+        `Failed to obtain Yodlee token for ${loginName}`,
+        e?.response?.data ?? e.message,
+      );
+      throw new InternalServerErrorException(
+        'Failed to obtain Yodlee access token',
+      );
     }
   }
 
@@ -81,6 +99,39 @@ export class YodleeService {
   private async authHeaders(loginName: string) {
     const token = await this.getAccessToken(loginName);
     return { Authorization: `Bearer ${token}` };
+  }
+
+  private handleYodleeError(err: unknown, context: string): never {
+    const e = err as {
+      response?: { status?: number; data?: unknown };
+      message?: string;
+    };
+    const status = e.response?.status;
+    this.logger.error(
+      `Yodlee API error in ${context}`,
+      e.response?.data ?? e.message,
+    );
+    if (status === 401)
+      throw new UnauthorizedException('Yodlee authentication failed');
+    if (status === 404)
+      throw new NotFoundException('Yodlee resource not found');
+    if (status === 409)
+      throw new ConflictException('Yodlee resource already exists');
+    if (status === 429)
+      throw new HttpException(
+        'Yodlee rate limit exceeded — try again shortly',
+        429,
+      );
+    throw new InternalServerErrorException('Yodlee API error');
+  }
+
+  private static mapAccount(raw: RawYodleeAccount): AccountDto {
+    const { CONTAINER, ...rest } = raw;
+    return { ...rest, container: CONTAINER };
+  }
+
+  private static mapTransaction(raw: RawYodleeTransaction): TransactionDto {
+    return raw;
   }
 
   // ---------------------------------------------------------------------------
@@ -109,8 +160,12 @@ export class YodleeService {
 
   async getUser(loginName: string) {
     const headers = await this.authHeaders(loginName);
-    const { data } = await this.http.get('/user', { headers });
-    return data;
+    try {
+      const { data } = await this.http.get<unknown>('/user', { headers });
+      return data;
+    } catch (err) {
+      this.handleYodleeError(err, 'getUser');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -138,7 +193,13 @@ export class YodleeService {
       this.logger.debug(`Yodlee user created: ${loginName}`);
       return loginName;
     } catch (err) {
-      const e = err as { response?: { data?: unknown }; message?: string };
+      const e = err as {
+        response?: { status?: number; data?: unknown };
+        message?: string;
+      };
+      if (e.response?.status === 409) {
+        throw new ConflictException('Yodlee user already exists');
+      }
       this.logger.error(
         `Failed to create Yodlee user ${loginName}`,
         e?.response?.data ?? e.message,
@@ -151,56 +212,120 @@ export class YodleeService {
   // Accounts (require user token)
   // ---------------------------------------------------------------------------
 
-  async getAccounts(loginName: string, params?: Record<string, string>) {
+  async getAccounts(
+    loginName: string,
+    params?: Record<string, string>,
+  ): Promise<AccountDto[]> {
     const headers = await this.authHeaders(loginName);
-    const { data } = await this.http.get('/accounts', { headers, params });
-    return data;
+    try {
+      const { data } = await this.http.get<{ account?: RawYodleeAccount[] }>(
+        '/accounts',
+        { headers, params },
+      );
+      return (data.account ?? []).map((a) => YodleeService.mapAccount(a));
+    } catch (err) {
+      this.handleYodleeError(err, 'getAccounts');
+    }
   }
 
-  async getAccount(loginName: string, accountId: number) {
+  async getAccount(
+    loginName: string,
+    accountId: number,
+  ): Promise<AccountDto | undefined> {
     const headers = await this.authHeaders(loginName);
-    const { data } = await this.http.get(`/accounts/${accountId}`, { headers });
-    return data;
+    try {
+      const { data } = await this.http.get<{ account?: RawYodleeAccount[] }>(
+        `/accounts/${accountId}`,
+        { headers },
+      );
+      const raw = data.account?.[0];
+      return raw ? YodleeService.mapAccount(raw) : undefined;
+    } catch (err) {
+      this.handleYodleeError(err, 'getAccount');
+    }
   }
 
-  async updateAccount(loginName: string, accountId: number, payload: Record<string, unknown>) {
+  async updateAccount(
+    loginName: string,
+    accountId: number,
+    payload: Record<string, unknown>,
+  ) {
     const headers = await this.authHeaders(loginName);
-    const { data } = await this.http.put(`/accounts/${accountId}`, payload, { headers });
-    return data;
+    try {
+      const { data } = await this.http.put<unknown>(
+        `/accounts/${accountId}`,
+        payload,
+        { headers },
+      );
+      return data;
+    } catch (err) {
+      this.handleYodleeError(err, 'updateAccount');
+    }
   }
 
   async deleteAccount(loginName: string, accountId: number): Promise<void> {
     const headers = await this.authHeaders(loginName);
-    await this.http.delete(`/accounts/${accountId}`, { headers });
+    try {
+      await this.http.delete(`/accounts/${accountId}`, { headers });
+    } catch (err) {
+      this.handleYodleeError(err, 'deleteAccount');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Transactions (require user token)
   // ---------------------------------------------------------------------------
 
-  async getTransactions(loginName: string, params?: Record<string, string>) {
+  async getTransactions(
+    loginName: string,
+    params?: Record<string, string>,
+  ): Promise<TransactionDto[]> {
     const headers = await this.authHeaders(loginName);
-    const { data } = await this.http.get('/transactions', { headers, params });
-    return data;
+    try {
+      const { data } = await this.http.get<{
+        transaction?: RawYodleeTransaction[];
+      }>('/transactions', { headers, params });
+      return (data.transaction ?? []).map((t) =>
+        YodleeService.mapTransaction(t),
+      );
+    } catch (err) {
+      this.handleYodleeError(err, 'getTransactions');
+    }
   }
 
-  async getTransactionsSummary(loginName: string, params?: Record<string, string>) {
+  async getTransactionsSummary(
+    loginName: string,
+    params?: Record<string, string>,
+  ) {
     const headers = await this.authHeaders(loginName);
-    const { data } = await this.http.get('/transactions/summary', { headers, params });
-    return data;
+    try {
+      const { data } = await this.http.get<unknown>('/transactions/summary', {
+        headers,
+        params,
+      });
+      return data;
+    } catch (err) {
+      this.handleYodleeError(err, 'getTransactionsSummary');
+    }
   }
 
   // ---------------------------------------------------------------------------
   // Sandbox demo endpoints (shared data, no per-user context)
   // ---------------------------------------------------------------------------
 
-  async getSandboxAccounts() {
-    const loginName = this.config.getOrThrow<string>('YODLEE_SANDBOX_LOGIN_NAME');
+  async getSandboxAccounts(): Promise<AccountDto[]> {
+    const loginName = this.config.getOrThrow<string>(
+      'YODLEE_SANDBOX_LOGIN_NAME',
+    );
     return this.getAccounts(loginName);
   }
 
-  async getSandboxTransactions(params?: Record<string, string>) {
-    const loginName = this.config.getOrThrow<string>('YODLEE_SANDBOX_LOGIN_NAME');
+  async getSandboxTransactions(
+    params?: Record<string, string>,
+  ): Promise<TransactionDto[]> {
+    const loginName = this.config.getOrThrow<string>(
+      'YODLEE_SANDBOX_LOGIN_NAME',
+    );
     return this.getTransactions(loginName, params);
   }
 
@@ -210,13 +335,27 @@ export class YodleeService {
 
   async getProviders(params?: Record<string, string>) {
     const headers = await this.authHeaders(this.adminLoginName);
-    const { data } = await this.http.get('/providers', { headers, params });
-    return data;
+    try {
+      const { data } = await this.http.get<unknown>('/providers', {
+        headers,
+        params,
+      });
+      return data;
+    } catch (err) {
+      this.handleYodleeError(err, 'getProviders');
+    }
   }
 
   async getProvider(providerId: number) {
     const headers = await this.authHeaders(this.adminLoginName);
-    const { data } = await this.http.get(`/providers/${providerId}`, { headers });
-    return data;
+    try {
+      const { data } = await this.http.get<unknown>(
+        `/providers/${providerId}`,
+        { headers },
+      );
+      return data;
+    } catch (err) {
+      this.handleYodleeError(err, 'getProvider');
+    }
   }
 }

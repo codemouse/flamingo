@@ -11,7 +11,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Flamingo API')
-    .setDescription('Flamingo backend REST API')
+    .setDescription('Flamingo REST API')
     .setVersion('1.0')
     .addBearerAuth(
       { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'Authenticated user JWT' },

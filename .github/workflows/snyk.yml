@@ -10,6 +10,9 @@ permissions:
   contents: read
   security-events: write   # needed to upload SARIF results
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   snyk:
     name: Snyk vulnerability scan
@@ -22,7 +25,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -30,13 +33,16 @@ jobs:
 
       # ── Test: fail the build on high/critical vulns ──────────────────────
       - name: Snyk test (all workspaces)
+        id: snyk-test
         uses: snyk/actions/node@master
+        continue-on-error: true   # allow SARIF upload even when vulns are found
         env:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           # --all-projects scans every workspace package.json
           # --severity-threshold=high fails only on high/critical
-          args: --all-projects --severity-threshold=high
+          # --sarif-file-output writes the SARIF file for the Security tab upload
+          args: --all-projects --severity-threshold=high --sarif-file-output=snyk.sarif
 
       # ── Monitor: upload snapshot to Snyk dashboard (main branch only) ───
       - name: Snyk monitor (main branch)
@@ -50,8 +56,12 @@ jobs:
 
       # ── SARIF upload: surfaces findings in GitHub Security tab ───────────
       - name: Upload Snyk SARIF to GitHub Security tab
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('snyk.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: snyk.sarif
-        continue-on-error: true   # SARIF file only exists when snyk outputs it
+
+      # ── Re-fail the job if snyk test found high/critical vulns ───────────
+      - name: Fail if vulnerabilities found
+        if: steps.snyk-test.outcome == 'failure'
+        run: exit 1

@@ -6,21 +6,21 @@ Personal finance dashboard powered by [Yodlee](https://developer.yodlee.com/). U
 
 ## Workspaces
 
-| Directory | Package | Port | Purpose |
-|-----------|---------|------|---------|
-| `api/` | `api` | **3000** | NestJS REST API + Swagger |
-| `web/` | `web` | **5173** | User-facing React dashboard |
-| `admin-web/` | `admin-web` | **5174** | Admin React panel |
+| Directory    | Package     | Port     | Purpose                     |
+| ------------ | ----------- | -------- | --------------------------- |
+| `api/`       | `api`       | **3000** | NestJS REST API + Swagger   |
+| `web/`       | `web`       | **5173** | User-facing React dashboard |
+| `admin-web/` | `admin-web` | **5174** | Admin React panel           |
 
 ---
 
 ## Prerequisites
 
-| Tool | Min version |
-|------|-------------|
-| Node.js | 20 |
-| npm | 10 |
-| PostgreSQL | 16 |
+| Tool       | Min version |
+| ---------- | ----------- |
+| Node.js    | 22          |
+| npm        | 10          |
+| PostgreSQL | 16          |
 
 ---
 
@@ -138,10 +138,22 @@ flamingo/
 │       └── pages/              # LoginPage, DashboardPage
 │
 ├── .github/
-│   ├── copilot-instructions.md # AI coding rules (schema, tests, swagger, security)
-│   └── workflows/snyk.yml      # Snyk security scanning CI
-├── docker-compose.yml          # PostgreSQL 16 container
-└── package.json                # npm workspace root
+│   ├── copilot-instructions.md        # AI coding rules (schema, tests, swagger, security)
+│   ├── dependabot.yml                 # Weekly dependency update PRs
+│   ├── CODEOWNERS                     # Auto-assign reviewers
+│   ├── PULL_REQUEST_TEMPLATE.md       # PR checklist
+│   ├── ISSUE_TEMPLATE/                # Bug report & feature request forms
+│   └── workflows/
+│       ├── ci.yml                     # Lint, type-check, unit tests, e2e, build
+│       ├── codeql.yml                 # SAST security analysis
+│       ├── snyk.yml                   # Dependency vulnerability scanning
+│       └── version-bump.yml           # Auto patch-bump on merge to main
+├── docker-compose.yml                 # PostgreSQL 16 container
+├── .editorconfig                      # Editor whitespace/indent rules
+├── CONTRIBUTING.md                    # Setup guide & contribution workflow
+├── LICENSE                            # MIT
+├── SECURITY.md                        # Vulnerability reporting policy
+└── package.json                       # npm workspace root
 ```
 
 ---
@@ -152,57 +164,57 @@ The API self-documents via Swagger UI at **[http://localhost:3000/api/docs](http
 
 ### Auth (`/auth`)
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `POST` | `/auth/register` | — | Create a new user account |
-| `POST` | `/auth/login` | — | Log in, returns `{ accessToken, user }` |
-| `GET` | `/auth/me` | JWT | Return the authenticated user's profile |
+| Method | Path             | Auth | Description                             |
+| ------ | ---------------- | ---- | --------------------------------------- |
+| `POST` | `/auth/register` | —    | Create a new user account               |
+| `POST` | `/auth/login`    | —    | Log in, returns `{ accessToken, user }` |
+| `GET`  | `/auth/me`       | JWT  | Return the authenticated user's profile |
 
 ### Yodlee — user-scoped (`/yodlee/me/*`)
 
 All require a valid user JWT. The user must have a `yodleeLoginName` assigned (done by an admin or automatically on sandbox registration).
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/yodlee/me/accounts` | List linked financial accounts |
-| `GET` | `/yodlee/me/transactions` | List transactions (`fromDate`, `toDate`, `accountId`, `top`) |
-| `GET` | `/yodlee/me/token` | Returns `{ accessToken, fastLinkUrl }` for FastLink initialisation |
-| `PATCH` | `/yodlee/me/accounts/:id` | Update account metadata (e.g. `nickname`) |
-| `DELETE` | `/yodlee/me/accounts/:id` | Remove a linked account (204 No Content) |
+| Method   | Path                      | Description                                                        |
+| -------- | ------------------------- | ------------------------------------------------------------------ |
+| `GET`    | `/yodlee/me/accounts`     | List linked financial accounts                                     |
+| `GET`    | `/yodlee/me/transactions` | List transactions (`fromDate`, `toDate`, `accountId`, `top`)       |
+| `GET`    | `/yodlee/me/token`        | Returns `{ accessToken, fastLinkUrl }` for FastLink initialisation |
+| `PATCH`  | `/yodlee/me/accounts/:id` | Update account metadata (e.g. `nickname`)                          |
+| `DELETE` | `/yodlee/me/accounts/:id` | Remove a linked account (204 No Content)                           |
 
 ### Yodlee — sandbox demo (`/yodlee/sandbox/*`)
 
 Available to any authenticated user. Returns pre-populated demo data.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/yodlee/sandbox/accounts` | Demo accounts |
-| `GET` | `/yodlee/sandbox/transactions` | Demo transactions |
+| Method | Path                           | Description       |
+| ------ | ------------------------------ | ----------------- |
+| `GET`  | `/yodlee/sandbox/accounts`     | Demo accounts     |
+| `GET`  | `/yodlee/sandbox/transactions` | Demo transactions |
 
 ### Yodlee — admin (`/yodlee/*`)
 
 Require **admin** JWT.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/yodlee/token` | Get a Yodlee access token for any loginName |
-| `GET` | `/yodlee/user` | Get Yodlee user details |
-| `GET` | `/yodlee/accounts` | Get accounts for any user |
-| `GET` | `/yodlee/accounts/:id` | Get a specific account |
-| `GET` | `/yodlee/transactions` | Get transactions for any user |
-| `GET` | `/yodlee/transactions/summary` | Transaction summary for any user |
-| `GET` | `/yodlee/providers` | List financial institution providers |
-| `GET` | `/yodlee/providers/:id` | Get a specific provider |
+| Method | Path                           | Description                                 |
+| ------ | ------------------------------ | ------------------------------------------- |
+| `POST` | `/yodlee/token`                | Get a Yodlee access token for any loginName |
+| `GET`  | `/yodlee/user`                 | Get Yodlee user details                     |
+| `GET`  | `/yodlee/accounts`             | Get accounts for any user                   |
+| `GET`  | `/yodlee/accounts/:id`         | Get a specific account                      |
+| `GET`  | `/yodlee/transactions`         | Get transactions for any user               |
+| `GET`  | `/yodlee/transactions/summary` | Transaction summary for any user            |
+| `GET`  | `/yodlee/providers`            | List financial institution providers        |
+| `GET`  | `/yodlee/providers/:id`        | Get a specific provider                     |
 
 ### Admin (`/admin/*`)
 
 Require **admin** JWT.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/admin/users` | List all users (passwordHash omitted) |
-| `PATCH` | `/admin/users/:id` | Update `role`, `email`, or `yodleeLoginName` |
-| `GET` | `/admin/sandbox-pool` | List the configured Yodlee sandbox user pool |
+| Method  | Path                  | Description                                  |
+| ------- | --------------------- | -------------------------------------------- |
+| `GET`   | `/admin/users`        | List all users (passwordHash omitted)        |
+| `PATCH` | `/admin/users/:id`    | Update `role`, `email`, or `yodleeLoginName` |
+| `GET`   | `/admin/sandbox-pool` | List the configured Yodlee sandbox user pool |
 
 ---
 
@@ -241,30 +253,41 @@ cd api && npm run test
 # Unit tests in watch mode
 cd api && npm run test:watch
 
+# Unit tests with coverage report
+cd api && npm run test:cov
+
 # E2E tests (requires flamingo_test DB)
 cd api && npm run test:e2e
-
-# Coverage report
-cd api && npm run test:cov
 ```
 
 Unit specs live alongside their source files (`*.spec.ts`). E2E specs are in `api/test/` and use Supertest against a real `flamingo_test` PostgreSQL database with Yodlee mocked.
 
+Coverage thresholds are enforced — `test:cov` will fail if lines, functions, or statements drop below the configured minimums in `api/package.json`.
+
 ---
 
-## Security scanning
+## CI / Security
 
-[Snyk](https://snyk.io) scans all workspaces for known CVEs on every pull request and push to `main`.
+Four workflows run automatically on pull requests and pushes to `main`:
+
+| Workflow           | Trigger                    | What it does                                                                  |
+| ------------------ | -------------------------- | ----------------------------------------------------------------------------- |
+| `ci.yml`           | PR / push to main          | Lint, type-check, unit tests (with coverage), e2e tests, build all workspaces |
+| `snyk.yml`         | PR / push to main          | Dependency CVE scan — blocks on high/critical. Results in Security tab        |
+| `codeql.yml`       | PR / push to main + weekly | GitHub SAST analysis for JS/TS                                                |
+| `version-bump.yml` | After CI passes on main    | Auto-increments patch version in changed workspaces                           |
+
+[Dependabot](https://docs.github.com/en/code-security/dependabot) opens weekly PRs for outdated dependencies across all four workspaces.
 
 ```bash
-# Run locally (requires SNYK_TOKEN env var or `snyk auth`)
+# Run Snyk locally (requires SNYK_TOKEN env var or `snyk auth`)
 npm run snyk:test
 
 # Upload a dependency snapshot to the Snyk dashboard
 npm run snyk:monitor
 ```
 
-The CI workflow (`.github/workflows/snyk.yml`) blocks merges on high/critical vulnerabilities. Add `SNYK_TOKEN` to your GitHub repo secrets to enable it.
+Add `SNYK_TOKEN` to your GitHub repo secrets to enable the Snyk workflow.
 
 ---
 

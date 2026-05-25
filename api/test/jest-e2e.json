@@ -9,6 +9,7 @@
   "setupFiles": ["./setup-env.ts"],
   "globalSetup": "./global-setup.ts",
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^(\\.{1,2}/.*)\\.js$": "$1"
   }
 }

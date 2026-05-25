@@ -5,7 +5,8 @@
   "workspaces": [
     "api",
     "web",
-    "admin-web"
+    "admin-web",
+    "e2e"
   ],
   "scripts": {
     "prepare": "husky",
@@ -16,6 +17,9 @@
     "api:build": "npm run build --workspace=api",
     "web:build": "npm run build --workspace=web",
     "admin-web:build": "npm run build --workspace=admin-web",
+    "test:e2e": "npm run test --workspace=e2e",
+    "test:e2e:web": "npm run test:web --workspace=e2e",
+    "test:e2e:admin": "npm run test:admin --workspace=e2e",
     "snyk:test": "snyk test --all-projects --severity-threshold=high",
     "snyk:monitor": "snyk monitor --all-projects --org=flamingo"
   },

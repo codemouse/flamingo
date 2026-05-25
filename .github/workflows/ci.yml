@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── API: lint, type-check, unit tests, build ─────────────────────────────
+  api:
+    name: API
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --workspace=api
+
+      - name: Type check
+        run: npx tsc --noEmit --project api/tsconfig.build.json
+
+      - name: Unit tests with coverage
+        run: npm run test:cov --workspace=api
+
+      - name: Build
+        run: npm run api:build
+
+  # ── API: e2e tests (requires Postgres) ───────────────────────────────────
+  api-e2e:
+    name: API E2E
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: flamingo_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write .env.test
+        run: |
+          cat > api/.env.test <<EOF
+          NODE_ENV=test
+          PORT=3001
+          DB_HOST=localhost
+          DB_PORT=5432
+          DB_USER=postgres
+          DB_PASSWORD=postgres
+          DB_NAME=flamingo_test
+          YODLEE_BASE_URL=https://sandbox.api.yodlee.com/ysl
+          YODLEE_CLIENT_ID=test_client_id
+          YODLEE_CLIENT_SECRET=test_client_secret
+          YODLEE_ADMIN_LOGIN_NAME=test_admin
+          YODLEE_SANDBOX_LOGIN_NAME=sbMem1
+          YODLEE_SANDBOX_USER_POOL=sbMem1,sbMem2
+          YODLEE_FASTLINK_URL=https://mock.fastlink.test
+          JWT_SECRET=ci-jwt-secret-not-for-production
+          JWT_EXPIRES_IN=7d
+          EOF
+
+      - name: Run migrations on test DB
+        run: |
+          for f in api/schema/[0-9]*.sql; do
+            psql postgresql://postgres:postgres@localhost:5432/flamingo_test -f "$f"
+          done
+
+      - name: E2E tests
+        run: npm run test:e2e --workspace=api
+
+  # ── Web frontends: type-check and build ───────────────────────────────────
+  web:
+    name: Web
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (web)
+        run: npx tsc --noEmit --project web/tsconfig.app.json
+
+      - name: Type check (admin-web)
+        run: npx tsc --noEmit --project admin-web/tsconfig.app.json
+
+      - name: Build web
+        run: npm run web:build
+
+      - name: Build admin-web
+        run: npm run admin-web:build

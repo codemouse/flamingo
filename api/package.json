@@ -1,10 +1,10 @@
 {
-  "name": "api",
+  "name": "flamingo-api",
   "version": "0.0.1",
   "description": "",
-  "author": "",
+  "author": "Brian Sodano",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -78,8 +78,22 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "**/*.(t|j)s"
+      "**/*.(t|j)s",
+      "!**/*.module.ts",
+      "!**/main.ts",
+      "!**/*.dto.ts",
+      "!**/*.entity.ts",
+      "!**/*.decorator.ts",
+      "!**/*.strategy.ts"
     ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 50,
+        "functions": 55,
+        "branches": 45,
+        "statements": 50
+      }
+    },
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
   }

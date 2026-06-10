@@ -14,9 +14,10 @@ describe('AppController (e2e)', () => {
   });
 
   it('GET /health returns 200 or GET / returns 404 (no root route)', () => {
-    return request(app.getHttpServer()).get('/').expect((res) => {
-      expect([200, 404]).toContain(res.status);
-    });
+    return request(app.getHttpServer())
+      .get('/')
+      .expect((res) => {
+        expect([200, 404]).toContain(res.status);
+      });
   });
 });
-

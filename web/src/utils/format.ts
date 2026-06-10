@@ -12,23 +12,22 @@ export const fmtDate = (iso: string) =>
     year: "numeric",
   });
 
-export const containerIcon = (
-  container: string,
-  accountType: string,
-): string => {
-  if (container === "creditCard") return "💳";
-  if (accountType === "SAVINGS") return "🏦";
-  if (accountType === "CHECKING") return "🏧";
-  if (container === "investment") return "📈";
+export const containerIcon = (type: string, subtype: string | null): string => {
+  if (type === "credit") return "💳";
+  if (subtype === "savings") return "🏦";
+  if (subtype === "checking") return "🏧";
+  if (type === "investment") return "📈";
+  if (type === "loan") return "🏠";
   return "🏦";
 };
 
 export const containerLabel = (
-  container: string,
-  accountType: string,
+  type: string,
+  subtype: string | null,
 ): string => {
-  if (container === "creditCard") return "Credit Card";
-  if (accountType === "SAVINGS") return "Savings";
-  if (accountType === "CHECKING") return "Checking";
-  return accountType || container;
+  if (type === "credit") return "Credit Card";
+  if (subtype === "savings") return "Savings";
+  if (subtype === "checking") return "Checking";
+  if (subtype) return subtype.charAt(0).toUpperCase() + subtype.slice(1);
+  return type.charAt(0).toUpperCase() + type.slice(1);
 };

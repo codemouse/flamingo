@@ -1,26 +1,26 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { login as apiLogin } from '../api/auth';
-import { useAuth } from '../contexts/AuthContext';
+import { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { login as apiLogin } from "../api/auth";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { signIn } = useAuth();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
     try {
       const data = await apiLogin(username, password);
       signIn(data.accessToken, data.user);
-      navigate('/dashboard');
+      navigate(data.user.role === "admin" ? "/admin" : "/dashboard");
     } catch {
-      setError('Invalid username or password.');
+      setError("Invalid username or password.");
     } finally {
       setLoading(false);
     }
@@ -40,7 +40,9 @@ export default function LoginPage() {
           {error && <div className="alert alert-error">{error}</div>}
 
           <div className="field">
-            <label className="field-label" htmlFor="username">Username</label>
+            <label className="field-label" htmlFor="username">
+              Username
+            </label>
             <input
               id="username"
               className="field-input"
@@ -54,7 +56,9 @@ export default function LoginPage() {
           </div>
 
           <div className="field">
-            <label className="field-label" htmlFor="password">Password</label>
+            <label className="field-label" htmlFor="password">
+              Password
+            </label>
             <input
               id="password"
               className="field-input"
@@ -67,14 +71,20 @@ export default function LoginPage() {
             />
           </div>
 
-          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+          <button
+            type="submit"
+            className="btn btn-primary btn-full"
+            disabled={loading}
+          >
+            {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
         <p className="auth-switch">
-          Don't have an account?{' '}
-          <Link to="/register" className="link">Create one</Link>
+          Don't have an account?{" "}
+          <Link to="/register" className="link">
+            Create one
+          </Link>
         </p>
       </div>
     </div>

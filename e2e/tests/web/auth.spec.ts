@@ -35,7 +35,7 @@ test.describe('login page', () => {
   });
 
   test('redirects to /dashboard on valid credentials', async ({ page }) => {
-    await page.route('**/yodlee/me/**', (route) =>
+    await page.route('**/plaid/me/**', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
     );
     await page.goto('/login');
@@ -89,7 +89,7 @@ test.describe('register page', () => {
 
   test('registers a new user and redirects to /dashboard', async ({ page }) => {
     const username = `e2e_reg_${Date.now()}`;
-    await page.route('**/yodlee/me/**', (route) =>
+    await page.route('**/plaid/me/**', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
     );
     await page.goto('/register');
@@ -106,7 +106,7 @@ test.describe('register page', () => {
 // ---------------------------------------------------------------------------
 test.describe('logout', () => {
   test('sign out clears auth and redirects to /login', async ({ page }) => {
-    await page.route('**/yodlee/me/**', (route) =>
+    await page.route('**/plaid/me/**', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
     );
     await page.goto('/login');

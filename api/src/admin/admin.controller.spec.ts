@@ -11,7 +11,6 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   email: null,
   passwordHash: 'should-never-be-returned',
   role: Role.USER,
-  yodleeLoginName: 'sbMem68c09b712b5831',
   createdAt: new Date('2024-01-01'),
   updatedAt: new Date('2024-01-01'),
   ...overrides,
@@ -37,7 +36,7 @@ describe('AdminController', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn().mockReturnValue('sbMem1,sbMem2,sbMem3'),
+            get: jest.fn().mockReturnValue('ins_109508,ins_3,ins_4'),
           },
         },
       ],
@@ -52,7 +51,10 @@ describe('AdminController', () => {
 
   describe('getAllUsers', () => {
     it('returns all users with passwordHash stripped', async () => {
-      const users = [makeUser(), makeUser({ id: 'uuid-2', username: 'bob', role: Role.ADMIN })];
+      const users = [
+        makeUser(),
+        makeUser({ id: 'uuid-2', username: 'bob', role: Role.ADMIN }),
+      ];
       (usersService.findAll as jest.Mock).mockResolvedValue(users);
 
       const result = await controller.getAllUsers();
@@ -77,32 +79,35 @@ describe('AdminController', () => {
       const dto: UpdateUserAdminDto = { role: Role.ADMIN };
       const result = await controller.updateUser('uuid-1', dto);
 
-      expect(usersService.adminUpdate).toHaveBeenCalledWith('uuid-1', { role: Role.ADMIN });
+      expect(usersService.adminUpdate).toHaveBeenCalledWith('uuid-1', {
+        role: Role.ADMIN,
+      });
       expect(result).not.toHaveProperty('passwordHash');
       expect(result.role).toBe(Role.ADMIN);
     });
 
-    it('updates yodleeLoginName and does not include undefined fields', async () => {
-      const updated = makeUser({ yodleeLoginName: 'sbMem68c09b712b5832' });
+    it('updates email and does not include undefined fields', async () => {
+      const updated = makeUser({ email: 'alice@example.com' });
       (usersService.adminUpdate as jest.Mock).mockResolvedValue(updated);
 
-      const dto: UpdateUserAdminDto = { yodleeLoginName: 'sbMem68c09b712b5832' };
+      const dto: UpdateUserAdminDto = { email: 'alice@example.com' };
       await controller.updateUser('uuid-1', dto);
 
-      // role is undefined so should not be passed
       expect(usersService.adminUpdate).toHaveBeenCalledWith('uuid-1', {
-        yodleeLoginName: 'sbMem68c09b712b5832',
+        email: 'alice@example.com',
       });
     });
 
-    it('passes null yodleeLoginName to unlink an account', async () => {
-      const updated = makeUser({ yodleeLoginName: null });
+    it('passes null email to clear it', async () => {
+      const updated = makeUser({ email: null });
       (usersService.adminUpdate as jest.Mock).mockResolvedValue(updated);
 
-      const dto: UpdateUserAdminDto = { yodleeLoginName: null };
+      const dto: UpdateUserAdminDto = { email: null };
       await controller.updateUser('uuid-1', dto);
 
-      expect(usersService.adminUpdate).toHaveBeenCalledWith('uuid-1', { yodleeLoginName: null });
+      expect(usersService.adminUpdate).toHaveBeenCalledWith('uuid-1', {
+        email: null,
+      });
     });
   });
 
@@ -110,8 +115,10 @@ describe('AdminController', () => {
 
   describe('getSandboxPool', () => {
     it('splits the comma-separated env var and returns trimmed entries', () => {
-      configService.get.mockReturnValue('sbMem1, sbMem2,  sbMem3 ');
-      expect(controller.getSandboxPool()).toEqual({ pool: ['sbMem1', 'sbMem2', 'sbMem3'] });
+      configService.get.mockReturnValue('ins_109508, ins_3,  ins_4 ');
+      expect(controller.getSandboxPool()).toEqual({
+        pool: ['ins_109508', 'ins_3', 'ins_4'],
+      });
     });
 
     it('returns an empty pool when the env var is empty', () => {

@@ -118,11 +118,5 @@ jobs:
       - name: Type check (web)
         run: npx tsc --noEmit --project web/tsconfig.app.json
 
-      - name: Type check (admin-web)
-        run: npx tsc --noEmit --project admin-web/tsconfig.app.json
-
       - name: Build web
         run: npm run web:build
-
-      - name: Build admin-web
-        run: npm run admin-web:build

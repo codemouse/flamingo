@@ -1,8 +1,8 @@
-import type { YodleeTransaction } from "../types/yodlee";
+import type { PlaidTransaction } from "../types/plaid";
 import { fmt, fmtDate } from "../utils/format";
 
 interface Props {
-  transactions: YodleeTransaction[];
+  transactions: PlaidTransaction[];
   loading?: boolean;
 }
 
@@ -37,32 +37,34 @@ export function TransactionsTable({ transactions, loading }: Props) {
             </thead>
             <tbody>
               {transactions.map((t) => {
-                const isCredit = t.type === "CREDIT";
-                const desc =
-                  t.merchant?.name ??
-                  t.description?.consumer ??
-                  t.description?.original ??
-                  "—";
+                // Plaid: positive = money out, negative = money in
+                const isInflow = t.amount < 0;
+                const desc = t.merchant_name ?? t.name ?? "—";
+                const category =
+                  t.personal_finance_category?.primary
+                    ?.replace(/_/g, " ")
+                    .toLowerCase()
+                    .replace(/^\w/, (c) => c.toUpperCase()) ?? "";
                 return (
-                  <tr key={t.id}>
-                    <td className="txn-date">{fmtDate(t.transactionDate)}</td>
+                  <tr key={t.transaction_id}>
+                    <td className="txn-date">{fmtDate(t.date)}</td>
                     <td className="txn-desc">{desc}</td>
                     <td>
-                      {t.category && (
-                        <span className="txn-category">{t.category}</span>
+                      {category && (
+                        <span className="txn-category">{category}</span>
                       )}
                     </td>
                     <td
-                      className={`txn-amount text-right ${isCredit ? "positive" : "negative"}`}
+                      className={`txn-amount text-right ${isInflow ? "positive" : "negative"}`}
                     >
-                      {isCredit ? "+" : "-"}
-                      {fmt(t.amount.amount, t.amount.currency)}
+                      {isInflow ? "+" : "−"}
+                      {fmt(Math.abs(t.amount), t.iso_currency_code ?? "USD")}
                     </td>
                     <td>
                       <span
-                        className={`txn-status txn-status--${(t.status ?? "").toLowerCase()}`}
+                        className={`txn-status txn-status--${t.pending ? "pending" : "posted"}`}
                       >
-                        {t.status ?? "—"}
+                        {t.pending ? "Pending" : "Posted"}
                       </span>
                     </td>
                   </tr>

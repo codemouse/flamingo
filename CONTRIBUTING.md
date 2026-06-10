@@ -48,9 +48,10 @@ psql -d flamingo_dev -f api/schema/001_create_users.sql
 psql -d flamingo_dev -f api/schema/002_add_yodlee_login_name.sql
 psql -d flamingo_dev -f api/schema/003_drop_email_unique.sql
 psql -d flamingo_dev -f api/schema/004_drop_yodlee_login_name_unique.sql
+psql -d flamingo_dev -f api/schema/005_create_plaid_items.sql
+psql -d flamingo_dev -f api/schema/006_drop_yodlee_login_name.sql
 
 # 7. (Optional) seed data
-psql -d flamingo_dev -f api/schema/data/001_seed_brian1_yodlee.sql
 psql -d flamingo_dev -f api/schema/data/003_seed_admin_user.sql
 
 # 8. Start all services in dev mode
@@ -117,7 +118,7 @@ cd api && npm run test:e2e
 
 - Unit tests live in `api/src/**/*.spec.ts` alongside the source file they test.
 - E2E tests live in `api/test/*.e2e-spec.ts`.
-- Never call external APIs (Yodlee, etc.) in tests — use the mocks in `api/test/helpers/`.
+- Never call external APIs (Plaid, etc.) in tests — use the mocks in `api/test/helpers/`.
 - New service methods and controller endpoints **must** have corresponding tests.
 
 ---

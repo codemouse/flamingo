@@ -1,9 +1,30 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
-import DashboardPage from './pages/DashboardPage';
+import { lazy, Suspense } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminProtectedRoute } from "./components/admin/AdminProtectedRoute";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
+
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const AdminDashboardPage = lazy(
+  () => import("./pages/admin/AdminDashboardPage"),
+);
+
+function RouteSuspense({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="loading-state">
+          <div className="spinner" />
+          <span className="text-muted">Loading…</span>
+        </div>
+      }
+    >
+      {children}
+    </Suspense>
+  );
+}
 
 export default function App() {
   return (
@@ -16,8 +37,20 @@ export default function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <DashboardPage />
+                <RouteSuspense>
+                  <DashboardPage />
+                </RouteSuspense>
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              <AdminProtectedRoute>
+                <RouteSuspense>
+                  <AdminDashboardPage />
+                </RouteSuspense>
+              </AdminProtectedRoute>
             }
           />
           <Route path="*" element={<Navigate to="/login" replace />} />

@@ -18,7 +18,8 @@ describe('Admin (e2e)', () => {
     ds = app.get(DataSource);
 
     // Remove leftovers
-    await ds.getRepository(User)
+    await ds
+      .getRepository(User)
       .createQueryBuilder()
       .delete()
       .where('username LIKE :prefix', { prefix: `${E2E_PREFIX}%` })
@@ -49,7 +50,8 @@ describe('Admin (e2e)', () => {
   });
 
   afterAll(async () => {
-    await ds.getRepository(User)
+    await ds
+      .getRepository(User)
       .createQueryBuilder()
       .delete()
       .where('username LIKE :prefix', { prefix: `${E2E_PREFIX}%` })
@@ -99,16 +101,6 @@ describe('Admin (e2e)', () => {
 
       // Restore
       await ds.getRepository(User).update(regularUserId, { role: Role.USER });
-    });
-
-    it('200 — admin can assign a yodleeLoginName', async () => {
-      const res = await request(app.getHttpServer())
-        .patch(`/admin/users/${regularUserId}`)
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send({ yodleeLoginName: 'sbMem68c09b712b5832' })
-        .expect(200);
-
-      expect(res.body.yodleeLoginName).toBe('sbMem68c09b712b5832');
     });
 
     it('400 — rejects an invalid role value', async () => {

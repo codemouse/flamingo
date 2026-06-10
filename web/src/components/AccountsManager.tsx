@@ -1,202 +1,42 @@
-import { useState, useEffect, useRef } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { YodleeAccount } from "../types/yodlee";
-import {
-  updateMyAccount,
-  deleteMyAccount,
-  getMyFastLinkToken,
-} from "../api/yodlee";
+import { useQueryClient } from "@tanstack/react-query";
+import type { PlaidAccount } from "../types/plaid";
+import { removeItem } from "../api/plaid";
 import { fmt, containerIcon, containerLabel } from "../utils/format";
-
-// ── FastLink modal ──────────────────────────────────────────────────────────
-
-interface FastLinkModalProps {
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-function FastLinkModal({ onClose, onSuccess }: FastLinkModalProps) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const closedRef = useRef(false);
-
-  useEffect(() => {
-    closedRef.current = false;
-
-    getMyFastLinkToken()
-      .then(({ accessToken, fastLinkUrl }) => {
-        if (closedRef.current) return;
-
-        const loadScript = (): Promise<void> =>
-          new Promise((resolve, reject) => {
-            if ((window as { fastlink?: unknown }).fastlink) {
-              resolve();
-              return;
-            }
-            const s = document.createElement("script");
-            s.src = "https://cdn.yodlee.com/fastlink/v4/initialize.js";
-            s.async = true;
-            s.onload = () => resolve();
-            s.onerror = () => reject(new Error("Failed to load FastLink SDK"));
-            document.head.appendChild(s);
-          });
-
-        loadScript()
-          .then(() => {
-            if (closedRef.current) return;
-            setLoading(false);
-            (
-              window as {
-                fastlink?: { open: (cfg: unknown, id: string) => void };
-              }
-            ).fastlink?.open(
-              {
-                fastLinkURL: fastLinkUrl,
-                accessToken: `Bearer ${accessToken}`,
-                params: { configName: "Aggregation" },
-                onSuccess: () => {
-                  if (!closedRef.current) onSuccess();
-                },
-                onError: (err: unknown) => {
-                  console.error("FastLink error", err);
-                  if (!closedRef.current)
-                    setError(
-                      "FastLink encountered an error. Please try again.",
-                    );
-                },
-                onClose: () => {
-                  if (!closedRef.current) onClose();
-                },
-                onEvent: () => {},
-              },
-              "yodlee-fastlink-container",
-            );
-          })
-          .catch(() => {
-            if (!closedRef.current) {
-              setError("Failed to load the bank connection widget.");
-              setLoading(false);
-            }
-          });
-      })
-      .catch(() => {
-        if (!closedRef.current) {
-          setError(
-            "Failed to get connection token. Make sure you are logged in.",
-          );
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      closedRef.current = true;
-      try {
-        (window as { fastlink?: { close: () => void } }).fastlink?.close();
-      } catch {
-        /* ignore */
-      }
-    };
-  }, [onClose, onSuccess]);
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3 className="modal-title">Connect a Bank</h3>
-          <button className="modal-close" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </div>
-
-        {loading && !error && (
-          <div className="modal-loading">
-            <div className="spinner" />
-            <p>Loading bank connection…</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="alert alert-error" style={{ margin: "1rem" }}>
-            {error}
-          </div>
-        )}
-
-        <div
-          id="yodlee-fastlink-container"
-          style={{ minHeight: loading ? 0 : 580 }}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ── AccountsManager ─────────────────────────────────────────────────────────
+import { PlaidLinkButton } from "./PlaidLinkButton";
+import { useState } from "react";
 
 interface Props {
-  accounts: YodleeAccount[];
+  accounts: PlaidAccount[];
 }
 
 export function AccountsManager({ accounts }: Props) {
   const queryClient = useQueryClient();
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [showFastLink, setShowFastLink] = useState(false);
+  const [unlinking, setUnlinking] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  const updateMutation = useMutation({
-    mutationFn: ({ id, nickname }: { id: number; nickname: string }) =>
-      updateMyAccount(id, { nickname }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      setEditingId(null);
-      setEditValue("");
-      setError("");
-    },
-    onError: () => setError("Failed to update account name."),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (accountId: number) => deleteMyAccount(accountId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["accounts"] });
-      setDeletingId(null);
-      setError("");
-    },
-    onError: () => setError("Failed to delete account."),
-  });
-
-  const startEdit = (a: YodleeAccount) => {
-    setEditingId(a.id);
-    setEditValue(a.accountName);
-    setDeletingId(null);
+  const handleUnlink = async (_itemId: string, flamingioId: string) => {
+    if (
+      !confirm("Disconnect this institution? All its accounts will be removed.")
+    )
+      return;
+    setUnlinking(flamingioId);
     setError("");
+    try {
+      await removeItem(flamingioId);
+      void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      void queryClient.invalidateQueries({ queryKey: ["items"] });
+    } catch {
+      setError("Failed to disconnect account. Please try again.");
+    } finally {
+      setUnlinking(null);
+    }
   };
 
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditValue("");
-  };
-
-  const saveEdit = () => {
-    if (editingId == null || !editValue.trim()) return;
-    updateMutation.mutate({ id: editingId, nickname: editValue.trim() });
-  };
-
-  const startDelete = (id: number) => {
-    setDeletingId(id);
-    setEditingId(null);
-    setError("");
-  };
-
-  const confirmDelete = () => {
-    if (deletingId == null) return;
-    deleteMutation.mutate(deletingId);
-  };
-
-  const handleFastLinkSuccess = () => {
-    setShowFastLink(false);
+  const handleLinkSuccess = () => {
     void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    void queryClient.invalidateQueries({ queryKey: ["transactions"] });
+    void queryClient.invalidateQueries({ queryKey: ["items"] });
   };
 
   return (
@@ -206,25 +46,15 @@ export function AccountsManager({ accounts }: Props) {
           <span className="section-title">Manage Accounts</span>
           {error && <span className="acct-mgr-error">{error}</span>}
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowFastLink(true)}
-        >
-          + Connect a Bank
-        </button>
+        <PlaidLinkButton
+          onSuccess={handleLinkSuccess}
+          label="+ Connect a Bank"
+        />
       </div>
 
       {accounts.length === 0 ? (
         <div className="acct-mgr-empty">
-          No accounts connected yet.{" "}
-          <button
-            className="link"
-            style={{ background: "none", border: "none", padding: 0 }}
-            onClick={() => setShowFastLink(true)}
-          >
-            Connect a bank
-          </button>{" "}
-          to get started.
+          No accounts connected yet. Use the button above to connect a bank.
         </div>
       ) : (
         <div className="acct-mgr-table-wrap">
@@ -234,131 +64,53 @@ export function AccountsManager({ accounts }: Props) {
                 <th>Account</th>
                 <th>Type</th>
                 <th>Balance</th>
-                <th>Provider</th>
+                <th>Institution</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {accounts.map((a) => (
-                <tr
-                  key={a.id}
-                  className={
-                    deletingId === a.id ? "acct-mgr-row--deleting" : ""
-                  }
-                >
-                  {/* Account name cell */}
-                  <td className="acct-mgr-name-cell">
-                    <span className="acct-mgr-icon">
-                      {containerIcon(a.container, a.accountType)}
-                    </span>
-                    {editingId === a.id ? (
-                      <div className="acct-mgr-edit-row">
-                        <input
-                          className="field-input acct-mgr-input"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") saveEdit();
-                            if (e.key === "Escape") cancelEdit();
-                          }}
-                          autoFocus
-                        />
-                        <button
-                          className="btn btn-primary acct-mgr-btn-sm"
-                          onClick={saveEdit}
-                          disabled={
-                            updateMutation.isPending || !editValue.trim()
-                          }
-                        >
-                          {updateMutation.isPending ? "…" : "Save"}
-                        </button>
-                        <button
-                          className="btn btn-ghost acct-mgr-btn-sm"
-                          onClick={cancelEdit}
-                          disabled={updateMutation.isPending}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="acct-mgr-name">{a.accountName}</span>
-                    )}
-                  </td>
-
-                  {/* Type */}
-                  <td className="acct-mgr-meta">
-                    {containerLabel(a.container, a.accountType)}
-                    {a.accountNumber && (
-                      <span className="acct-mgr-number">
-                        {" "}
-                        ···{a.accountNumber.slice(-4)}
+              {accounts.map((a) => {
+                const balance = a.balances.current ?? a.balances.available ?? 0;
+                const currency = a.balances.iso_currency_code ?? "USD";
+                return (
+                  <tr key={a.account_id}>
+                    <td className="acct-mgr-name-cell">
+                      <span className="acct-mgr-icon">
+                        {containerIcon(a.type, a.subtype)}
                       </span>
-                    )}
-                  </td>
-
-                  {/* Balance */}
-                  <td
-                    className={`acct-mgr-balance ${a.isAsset ? "positive" : "negative"}`}
-                  >
-                    {fmt(a.balance.amount, a.balance.currency)}
-                  </td>
-
-                  {/* Provider */}
-                  <td className="acct-mgr-meta">{a.providerName}</td>
-
-                  {/* Actions */}
-                  <td className="acct-mgr-actions-cell">
-                    {deletingId === a.id ? (
-                      <div className="acct-mgr-confirm">
-                        <span className="acct-mgr-confirm-label">Delete?</span>
-                        <button
-                          className="btn btn-danger acct-mgr-btn-sm"
-                          onClick={confirmDelete}
-                          disabled={deleteMutation.isPending}
-                        >
-                          {deleteMutation.isPending ? "…" : "Yes, delete"}
-                        </button>
-                        <button
-                          className="btn btn-ghost acct-mgr-btn-sm"
-                          onClick={() => setDeletingId(null)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="acct-mgr-actions">
-                        <button
-                          className="acct-mgr-icon-btn"
-                          onClick={() => startEdit(a)}
-                          title="Rename account"
-                          disabled={editingId != null}
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          className="acct-mgr-icon-btn acct-mgr-icon-btn--danger"
-                          onClick={() => startDelete(a.id)}
-                          title="Delete account"
-                          disabled={editingId != null}
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      <span className="acct-mgr-name">{a.name}</span>
+                      {a.mask && (
+                        <span className="acct-mgr-number"> ···{a.mask}</span>
+                      )}
+                    </td>
+                    <td className="acct-mgr-meta">
+                      {containerLabel(a.type, a.subtype)}
+                    </td>
+                    <td>
+                      <span
+                        className={
+                          a.type === "credit" ? "negative" : "positive"
+                        }
+                      >
+                        {fmt(balance, currency)}
+                      </span>
+                    </td>
+                    <td>{a.institutionName ?? "—"}</td>
+                    <td>
+                      <button
+                        className="btn btn-ghost acct-mgr-btn-sm"
+                        onClick={() => handleUnlink(a.itemId, a.itemId)}
+                        disabled={unlinking === a.itemId}
+                      >
+                        {unlinking === a.itemId ? "Removing…" : "Disconnect"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-      )}
-
-      {showFastLink && (
-        <FastLinkModal
-          onClose={() => setShowFastLink(false)}
-          onSuccess={handleFastLinkSuccess}
-        />
       )}
     </div>
   );

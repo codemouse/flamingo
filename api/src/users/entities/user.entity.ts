@@ -28,9 +28,6 @@ export class User {
   @Column({ type: 'enum', enum: Role, default: Role.USER })
   declare role: Role;
 
-  @Column({ name: 'yodlee_login_name', type: 'varchar', nullable: true, default: null })
-  declare yodleeLoginName: string | null;
-
   @CreateDateColumn({ name: 'created_at' })
   declare createdAt: Date;
 

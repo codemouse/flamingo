@@ -1,8 +1,8 @@
-import type { YodleeAccount } from "../types/yodlee";
+import type { PlaidAccount } from "../types/plaid";
 import { AccountCard } from "./AccountCard";
 
 interface Props {
-  accounts: YodleeAccount[];
+  accounts: PlaidAccount[];
 }
 
 function Section({
@@ -10,7 +10,7 @@ function Section({
   accounts,
 }: {
   title: string;
-  accounts: YodleeAccount[];
+  accounts: PlaidAccount[];
 }) {
   if (accounts.length === 0) return null;
   return (
@@ -18,7 +18,7 @@ function Section({
       <h3 className="accounts-section-title">{title}</h3>
       <div className="accounts-grid">
         {accounts.map((a) => (
-          <AccountCard key={a.id} account={a} />
+          <AccountCard key={a.account_id} account={a} />
         ))}
       </div>
     </div>
@@ -26,16 +26,16 @@ function Section({
 }
 
 export function AccountsGrid({ accounts }: Props) {
-  const bankAccounts = accounts.filter((a) => a.container === "bank");
-  const creditCards = accounts.filter((a) => a.container === "creditCard");
+  const depository = accounts.filter((a) => a.type === "depository");
+  const credit = accounts.filter((a) => a.type === "credit");
   const others = accounts.filter(
-    (a) => a.container !== "bank" && a.container !== "creditCard",
+    (a) => a.type !== "depository" && a.type !== "credit",
   );
 
   return (
     <div className="accounts-sections">
-      <Section title="Bank Accounts" accounts={bankAccounts} />
-      <Section title="Credit Cards" accounts={creditCards} />
+      <Section title="Bank Accounts" accounts={depository} />
+      <Section title="Credit Cards" accounts={credit} />
       <Section title="Other Accounts" accounts={others} />
     </div>
   );

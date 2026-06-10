@@ -1,17 +1,17 @@
-import type { YodleeAccount } from "../types/yodlee";
+import type { PlaidAccount } from "../types/plaid";
 import { fmt } from "../utils/format";
 
 interface Props {
-  accounts: YodleeAccount[];
+  accounts: PlaidAccount[];
 }
 
 export function NetWorthBanner({ accounts }: Props) {
   const assets = accounts
-    .filter((a) => a.isAsset)
-    .reduce((sum, a) => sum + (a.balance?.amount ?? 0), 0);
+    .filter((a) => a.type !== "credit" && a.type !== "loan")
+    .reduce((sum, a) => sum + (a.balances.current ?? 0), 0);
   const liabilities = accounts
-    .filter((a) => !a.isAsset)
-    .reduce((sum, a) => sum + (a.balance?.amount ?? 0), 0);
+    .filter((a) => a.type === "credit" || a.type === "loan")
+    .reduce((sum, a) => sum + (a.balances.current ?? 0), 0);
   const netWorth = assets - liabilities;
 
   return (

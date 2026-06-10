@@ -17,7 +17,11 @@ export class UsersService {
     private readonly repo: Repository<User>,
   ) {}
 
-  async create(username: string, password: string, email?: string): Promise<User> {
+  async create(
+    username: string,
+    password: string,
+    email?: string,
+  ): Promise<User> {
     const existing = await this.repo.findOne({ where: { username } });
     if (existing) {
       throw new ConflictException(`Username "${username}" is already taken`);
@@ -48,11 +52,13 @@ export class UsersService {
     return user;
   }
 
-  async setYodleeLoginName(id: string, yodleeLoginName: string): Promise<void> {
-    await this.repo.update(id, { yodleeLoginName });
-  }
-
-  async adminUpdate(id: string, fields: { role?: import('./entities/user.entity').Role; email?: string | null; yodleeLoginName?: string | null }): Promise<User> {
+  async adminUpdate(
+    id: string,
+    fields: {
+      role?: import('./entities/user.entity').Role;
+      email?: string | null;
+    },
+  ): Promise<User> {
     await this.repo.update(id, fields);
     return this.findById(id);
   }

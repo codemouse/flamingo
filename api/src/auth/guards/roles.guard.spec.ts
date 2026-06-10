@@ -18,7 +18,9 @@ describe('RolesGuard', () => {
   let reflector: jest.Mocked<Pick<Reflector, 'getAllAndOverride'>>;
 
   beforeEach(() => {
-    reflector = { getAllAndOverride: jest.fn() } as unknown as jest.Mocked<Pick<Reflector, 'getAllAndOverride'>>;
+    reflector = { getAllAndOverride: jest.fn() } as unknown as jest.Mocked<
+      Pick<Reflector, 'getAllAndOverride'>
+    >;
     guard = new RolesGuard(reflector as unknown as Reflector);
   });
 

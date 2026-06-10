@@ -15,7 +15,6 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   email: null,
   passwordHash: 'hashed',
   role: Role.USER,
-  yodleeLoginName: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,
@@ -48,7 +47,6 @@ describe('UsersService', () => {
 
   afterEach(() => jest.clearAllMocks());
 
-  // ---------------------------------------------------------------------------
   describe('create', () => {
     it('hashes the password and saves the user', async () => {
       repo.findOne.mockResolvedValue(null);
@@ -61,14 +59,19 @@ describe('UsersService', () => {
 
       expect(mockBcrypt.hash).toHaveBeenCalledWith('password123', 12);
       expect(repo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ username: 'alice', passwordHash: 'hashed-pw' }),
+        expect.objectContaining({
+          username: 'alice',
+          passwordHash: 'hashed-pw',
+        }),
       );
       expect(result.username).toBe('alice');
     });
 
     it('throws ConflictException when username is taken', async () => {
       repo.findOne.mockResolvedValue(makeUser());
-      await expect(service.create('alice', 'password123')).rejects.toThrow(ConflictException);
+      await expect(service.create('alice', 'password123')).rejects.toThrow(
+        ConflictException,
+      );
       expect(repo.save).not.toHaveBeenCalled();
     });
 
@@ -79,12 +82,15 @@ describe('UsersService', () => {
       repo.create.mockReturnValue(created);
       repo.save.mockResolvedValue(created);
 
-      const result = await service.create('alice', 'password123', 'alice@example.com');
+      const result = await service.create(
+        'alice',
+        'password123',
+        'alice@example.com',
+      );
       expect(result.email).toBe('alice@example.com');
     });
   });
 
-  // ---------------------------------------------------------------------------
   describe('findByUsername', () => {
     it('returns the user when found', async () => {
       repo.findOne.mockResolvedValue(makeUser());
@@ -99,7 +105,6 @@ describe('UsersService', () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
   describe('findById', () => {
     it('returns the user when found', async () => {
       repo.findOne.mockResolvedValue(makeUser());
@@ -109,11 +114,12 @@ describe('UsersService', () => {
 
     it('throws NotFoundException when not found', async () => {
       repo.findOne.mockResolvedValue(null);
-      await expect(service.findById('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.findById('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
-  // ---------------------------------------------------------------------------
   describe('findAll', () => {
     it('returns all users ordered by createdAt ASC', async () => {
       const users = [makeUser(), makeUser({ id: 'uuid-2', username: 'bob' })];
@@ -131,20 +137,6 @@ describe('UsersService', () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  describe('setYodleeLoginName', () => {
-    it('calls repo.update with the user id and loginName', async () => {
-      (repo.update as jest.Mock).mockResolvedValue({ affected: 1 });
-
-      await service.setYodleeLoginName('uuid-1', 'sbMem68c09b712b5831');
-
-      expect(repo.update).toHaveBeenCalledWith('uuid-1', {
-        yodleeLoginName: 'sbMem68c09b712b5831',
-      });
-    });
-  });
-
-  // ---------------------------------------------------------------------------
   describe('adminUpdate', () => {
     it('updates the specified fields and returns the refreshed user', async () => {
       const updated = makeUser({ role: Role.ADMIN });
@@ -157,22 +149,21 @@ describe('UsersService', () => {
       expect(result.role).toBe(Role.ADMIN);
     });
 
-    it('can set yodleeLoginName to null to unlink', async () => {
-      const updated = makeUser({ yodleeLoginName: null });
+    it('can clear email by setting it to null', async () => {
+      const updated = makeUser({ email: null });
       (repo.update as jest.Mock).mockResolvedValue({ affected: 1 });
       repo.findOne.mockResolvedValue(updated);
 
-      const result = await service.adminUpdate('uuid-1', { yodleeLoginName: null });
-      expect(result.yodleeLoginName).toBeNull();
+      const result = await service.adminUpdate('uuid-1', { email: null });
+      expect(result.email).toBeNull();
     });
 
     it('throws NotFoundException when the target user does not exist', async () => {
       (repo.update as jest.Mock).mockResolvedValue({ affected: 0 });
       repo.findOne.mockResolvedValue(null);
-
-      await expect(service.adminUpdate('missing', { role: Role.ADMIN })).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.adminUpdate('uuid-1', { role: Role.ADMIN }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

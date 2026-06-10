@@ -1,7 +1,7 @@
 import { INestApplication } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import request from 'supertest';
-import { createTestApp, mockYodleeService } from './helpers/create-test-app';
+import { createTestApp } from './helpers/create-test-app';
 import { User } from '../src/users/entities/user.entity';
 
 const E2E_PREFIX = 'e2e_auth_';
@@ -14,11 +14,14 @@ describe('Auth (e2e)', () => {
     app = await createTestApp();
     ds = app.get(DataSource);
     // Clean up any leftover test users from previous runs
-    await ds.getRepository(User).delete({ username: `${E2E_PREFIX}alice` as unknown as string });
+    await ds
+      .getRepository(User)
+      .delete({ username: `${E2E_PREFIX}alice` as unknown as string });
   });
 
   afterAll(async () => {
-    await ds.getRepository(User)
+    await ds
+      .getRepository(User)
       .createQueryBuilder()
       .delete()
       .where('username LIKE :prefix', { prefix: `${E2E_PREFIX}%` })
@@ -42,7 +45,6 @@ describe('Auth (e2e)', () => {
         role: 'user',
       });
       expect(res.body).not.toHaveProperty('passwordHash');
-      expect(mockYodleeService.getRandomSandboxLoginName).toHaveBeenCalled();
     });
 
     it('409 — conflicts when the username is already taken', async () => {
@@ -114,7 +116,9 @@ describe('Auth (e2e)', () => {
     beforeAll(async () => {
       const creds = { username: `${E2E_PREFIX}carol`, password: 'Password1!' };
       await request(app.getHttpServer()).post('/auth/register').send(creds);
-      const res = await request(app.getHttpServer()).post('/auth/login').send(creds);
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send(creds);
       token = res.body.accessToken;
     });
 

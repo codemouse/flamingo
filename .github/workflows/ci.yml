@@ -46,6 +46,12 @@ jobs:
     services:
       postgres:
         image: postgres:16
+        # Authenticate to Docker Hub so the service-image pull is not subject
+        # to anonymous rate limiting (100 pulls / 6h per shared runner IP).
+        # If the secrets are unset, GitHub falls back to anonymous pulls.
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres

@@ -305,7 +305,19 @@ npm run snyk:test
 npm run snyk:monitor
 ```
 
-Add `SNYK_TOKEN` to your GitHub repo secrets to enable the Snyk workflow.
+### Required GitHub repository secrets
+
+Configure these under **Settings → Secrets and variables → Actions**:
+
+| Secret               | Used by                | Required?               | How to obtain                                                                                                                  |
+| -------------------- | ---------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `SNYK_TOKEN`         | `snyk.yml`             | Required to enable scan | Sign in at [snyk.io](https://app.snyk.io) → Account Settings → Auth Token                                                      |
+| `DOCKERHUB_USERNAME` | `ci.yml` (api-e2e job) | Recommended             | Your Docker Hub username                                                                                                       |
+| `DOCKERHUB_TOKEN`    | `ci.yml` (api-e2e job) | Recommended             | [hub.docker.com](https://hub.docker.com/settings/security) → New Access Token (scope: **Public Repo Read-Only** is sufficient) |
+
+`GITHUB_TOKEN` is injected automatically by GitHub Actions and does not need to be configured.
+
+`DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` authenticate the `postgres:16` service-container pull in the `api-e2e` job, raising the rate limit from 100 anonymous pulls / 6h per shared runner IP to 200 authenticated pulls / 6h. If unset, the job falls back to anonymous pulls and may intermittently fail with `context deadline exceeded` when Docker Hub is congested.
 
 ---
 

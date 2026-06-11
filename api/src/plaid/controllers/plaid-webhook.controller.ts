@@ -14,10 +14,11 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import type { Request } from 'express';
+import type { FastifyRequest } from 'fastify';
 import { PlaidWebhookVerifier } from '../plaid-webhook.verifier.js';
 import { PlaidItemsService } from '../plaid-items.service.js';
 import { PlaidService } from '../plaid.service.js';
+import { PlaidSyncScheduler } from '../queues/plaid-sync.scheduler.js';
 
 interface PlaidWebhookBody {
   webhook_type?: string;
@@ -36,6 +37,7 @@ export class PlaidWebhookController {
     private readonly verifier: PlaidWebhookVerifier,
     private readonly items: PlaidItemsService,
     private readonly plaid: PlaidService,
+    private readonly scheduler: PlaidSyncScheduler,
   ) {}
 
   @Post()
@@ -47,10 +49,11 @@ export class PlaidWebhookController {
     description: 'Signature missing or invalid (production)',
   })
   async handle(
-    @Req() req: Request & { rawBody?: Buffer },
+    @Req() req: FastifyRequest & { rawBody?: Buffer },
     @Body() body: PlaidWebhookBody,
   ): Promise<{ ok: true }> {
-    const signature = req.header('Plaid-Verification') ?? undefined;
+    const sigHeader = req.headers['plaid-verification'];
+    const signature = Array.isArray(sigHeader) ? sigHeader[0] : sigHeader;
     const raw = req.rawBody ?? Buffer.from(JSON.stringify(body));
     await this.verifier.verify(raw, signature);
 
@@ -83,11 +86,7 @@ export class PlaidWebhookController {
       body.webhook_code === 'HISTORICAL_UPDATE' ||
       body.webhook_code === 'DEFAULT_UPDATE'
     ) {
-      const { nextCursor } = await this.plaid.syncTransactions(
-        item.accessToken,
-        item.cursor,
-      );
-      if (nextCursor) await this.items.updateCursor(item.id, nextCursor);
+      await this.scheduler.enqueueItemSync(item.id);
     }
   }
 

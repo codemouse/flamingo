@@ -1,8 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
+import { PasswordService } from '../users/password.service';
 import { User } from '../users/entities/user.entity';
 import { JwtPayload } from './types/jwt.types';
 import { RefreshTokensService } from './refresh-tokens.service';
@@ -17,11 +17,14 @@ export interface IssuedTokens {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly users: UsersService,
     private readonly jwt: JwtService,
     private readonly refreshTokens: RefreshTokensService,
     private readonly config: ConfigService,
+    private readonly passwords: PasswordService,
   ) {}
 
   async register(
@@ -43,22 +46,61 @@ export class AuthService {
     const user = await this.users.findByUsername(username);
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const match = await bcrypt.compare(password, user.passwordHash);
-    if (!match) throw new UnauthorizedException('Invalid credentials');
+    const { valid, needsRehash } = await this.passwords.verify(
+      password,
+      user.passwordHash,
+    );
+    if (!valid) throw new UnauthorizedException('Invalid credentials');
+
+    // Opportunistic upgrade from bcrypt → argon2 (or weaker argon2 params).
+    if (needsRehash) {
+      try {
+        const newHash = await this.passwords.hash(password);
+        await this.users.updatePasswordHash(user.id, newHash);
+        user.passwordHash = newHash;
+      } catch (err) {
+        // Don't fail login if rehash storage fails — log and continue.
+        this.logger.warn(
+          `Password rehash failed for user=${user.id}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     return this.issueTokens(user, meta);
   }
 
-  /** Rotate a refresh token: validate, revoke old, issue new pair. */
+  /**
+   * Rotate a refresh token: validate, revoke old, issue new pair.
+   *
+   * Includes reuse detection: if the presented token exists but is already
+   * revoked, treat it as a stolen-token replay and revoke every active
+   * refresh token for the user. The legitimate session will be forced to
+   * re-authenticate, which is the correct behavior under suspicion.
+   */
   async refresh(
     rawRefreshToken: string,
     meta: { userAgent?: string | null; ip?: string | null } = {},
   ): Promise<IssuedTokens> {
-    const row = await this.refreshTokens.findActiveByRawToken(rawRefreshToken);
+    const row = await this.refreshTokens.findByRawToken(rawRefreshToken);
     if (!row) throw new UnauthorizedException('Invalid refresh token');
+
+    if (row.revokedAt) {
+      // Replay of a previously-rotated token. Burn all active tokens for the
+      // user — the safer of the two failure modes.
+      this.logger.warn(
+        `Refresh token reuse detected for user=${row.userId} token=${row.id}; revoking entire family`,
+      );
+      await this.refreshTokens.revokeAllForUser(row.userId);
+      throw new UnauthorizedException('Refresh token reuse detected');
+    }
+
+    if (row.expiresAt.getTime() < Date.now()) {
+      throw new UnauthorizedException('Refresh token expired');
+    }
 
     const user = await this.users.findById(row.userId);
     const tokens = await this.issueTokens(user, meta);
+    // Note the linkage so we can trace replay chains.
     await this.refreshTokens.revoke(row.id);
     return tokens;
   }

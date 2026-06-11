@@ -5,16 +5,15 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { User, Role } from './entities/user.entity';
-
-const SALT_ROUNDS = 12;
+import { PasswordService } from './password.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly repo: Repository<User>,
+    private readonly passwords: PasswordService,
   ) {}
 
   async create(
@@ -27,7 +26,7 @@ export class UsersService {
       throw new ConflictException(`Username "${username}" is already taken`);
     }
 
-    const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    const passwordHash = await this.passwords.hash(password);
     const user = this.repo.create({
       username,
       passwordHash,
@@ -50,6 +49,11 @@ export class UsersService {
     const user = await this.repo.findOne({ where: { id } });
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  /** Replace the user's stored hash. Used during password rotation/upgrade. */
+  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.repo.update(id, { passwordHash });
   }
 
   async adminUpdate(

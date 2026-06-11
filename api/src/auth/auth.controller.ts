@@ -19,7 +19,8 @@ import {
 } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
-import type { Request, Response, CookieOptions } from 'express';
+import type { FastifyRequest, FastifyReply } from 'fastify';
+import type { CookieSerializeOptions } from '@fastify/cookie';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -37,7 +38,7 @@ export class AuthController {
   ) {}
 
   @Post('register')
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
   @ApiResponse({ status: 409, description: 'Username already taken' })
@@ -47,7 +48,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
   @ApiOperation({
     summary: 'Log in; sets httpOnly cookies and also returns accessToken',
   })
@@ -58,8 +59,8 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(
     @Body() dto: LoginDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply,
   ) {
     const tokens = await this.auth.login(dto.username, dto.password, {
       userAgent: req.headers['user-agent'] ?? null,
@@ -76,6 +77,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ auth: { limit: 30, ttl: 60_000 } })
   @ApiOperation({
     summary:
       'Rotate refresh token (reads cookie or body) and issue a new access token',
@@ -83,13 +85,11 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Returns new accessToken' })
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
   async refresh(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply,
     @Body() body: { refreshToken?: string } = {},
   ) {
-    const raw =
-      (req.cookies?.[REFRESH_COOKIE] as string | undefined) ??
-      body?.refreshToken;
+    const raw = req.cookies?.[REFRESH_COOKIE] ?? body?.refreshToken;
     if (!raw) throw new UnauthorizedException('Missing refresh token');
 
     const tokens = await this.auth.refresh(raw, {
@@ -109,9 +109,11 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke refresh token and clear auth cookies' })
   @ApiResponse({ status: 204, description: 'Logged out' })
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const raw =
-      (req.cookies?.[REFRESH_COOKIE] as string | undefined) ?? undefined;
+  async logout(
+    @Req() req: FastifyRequest,
+    @Res({ passthrough: true }) res: FastifyReply,
+  ) {
+    const raw = req.cookies?.[REFRESH_COOKIE] ?? undefined;
     await this.auth.logout(raw);
     this.clearAuthCookies(res);
   }
@@ -130,7 +132,7 @@ export class AuthController {
   // Cookie helpers
   // ---------------------------------------------------------------------------
 
-  private cookieOptions(maxAgeMs: number): CookieOptions {
+  private cookieOptions(maxAgeMs: number): CookieSerializeOptions {
     const isProd = this.config.get<string>('NODE_ENV') === 'production';
     const domain = this.config.get<string>('COOKIE_DOMAIN');
     return {
@@ -138,13 +140,13 @@ export class AuthController {
       secure: isProd,
       sameSite: isProd ? 'strict' : 'lax',
       path: '/',
-      maxAge: maxAgeMs,
+      maxAge: Math.floor(maxAgeMs / 1000),
       ...(domain ? { domain } : {}),
     };
   }
 
   private setAuthCookies(
-    res: Response,
+    res: FastifyReply,
     accessToken: string,
     refreshToken: string,
     refreshExpiresAt: Date,
@@ -155,11 +157,11 @@ export class AuthController {
     );
     const refreshMs = Math.max(0, refreshExpiresAt.getTime() - Date.now());
 
-    res.cookie(ACCESS_COOKIE, accessToken, this.cookieOptions(accessMs));
-    res.cookie(REFRESH_COOKIE, refreshToken, this.cookieOptions(refreshMs));
+    res.setCookie(ACCESS_COOKIE, accessToken, this.cookieOptions(accessMs));
+    res.setCookie(REFRESH_COOKIE, refreshToken, this.cookieOptions(refreshMs));
   }
 
-  private clearAuthCookies(res: Response): void {
+  private clearAuthCookies(res: FastifyReply): void {
     const opts = this.cookieOptions(0);
     res.clearCookie(ACCESS_COOKIE, opts);
     res.clearCookie(REFRESH_COOKIE, opts);

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login as apiLogin } from "../api/auth";
+import type { ApiError } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function LoginPage() {
@@ -19,8 +20,19 @@ export default function LoginPage() {
       const data = await apiLogin(username, password);
       signIn(data.accessToken, data.user);
       navigate(data.user.role === "admin" ? "/admin" : "/dashboard");
-    } catch {
-      setError("Invalid username or password.");
+    } catch (err) {
+      const apiErr = err as ApiError;
+      if (apiErr.isNetworkError) {
+        setError(
+          "Can't reach the server. Please check your connection or try again in a moment.",
+        );
+      } else if (apiErr.status === 429) {
+        setError("Too many attempts. Please wait a moment and try again.");
+      } else if (apiErr.status === 401) {
+        setError("Invalid username or password.");
+      } else {
+        setError(apiErr.message || "Something went wrong. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

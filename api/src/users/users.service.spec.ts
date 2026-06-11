@@ -2,12 +2,14 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { UsersService } from './users.service';
+import { PasswordService } from './password.service';
 import { User, Role } from './entities/user.entity';
 
-jest.mock('bcrypt');
-const mockBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
+const makePasswordsMock = () => ({
+  hash: jest.fn().mockResolvedValue('hashed-pw'),
+  verify: jest.fn(),
+});
 
 const makeUser = (overrides: Partial<User> = {}): User => ({
   id: 'uuid-1',
@@ -23,8 +25,10 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
 describe('UsersService', () => {
   let service: UsersService;
   let repo: jest.Mocked<Repository<User>>;
+  let passwords: ReturnType<typeof makePasswordsMock>;
 
   beforeEach(async () => {
+    passwords = makePasswordsMock();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UsersService,
@@ -38,6 +42,7 @@ describe('UsersService', () => {
             update: jest.fn(),
           },
         },
+        { provide: PasswordService, useValue: passwords },
       ],
     }).compile();
 
@@ -50,14 +55,13 @@ describe('UsersService', () => {
   describe('create', () => {
     it('hashes the password and saves the user', async () => {
       repo.findOne.mockResolvedValue(null);
-      mockBcrypt.hash.mockResolvedValue('hashed-pw' as never);
       const created = makeUser();
       repo.create.mockReturnValue(created);
       repo.save.mockResolvedValue(created);
 
       const result = await service.create('alice', 'password123');
 
-      expect(mockBcrypt.hash).toHaveBeenCalledWith('password123', 12);
+      expect(passwords.hash).toHaveBeenCalledWith('password123');
       expect(repo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           username: 'alice',
@@ -77,7 +81,6 @@ describe('UsersService', () => {
 
     it('accepts an optional email', async () => {
       repo.findOne.mockResolvedValue(null);
-      mockBcrypt.hash.mockResolvedValue('hashed-pw' as never);
       const created = makeUser({ email: 'alice@example.com' });
       repo.create.mockReturnValue(created);
       repo.save.mockResolvedValue(created);

@@ -56,7 +56,7 @@ export default function DashboardPage() {
   ).flatMap((s) => s.added);
 
   const handleLogout = () => {
-    signOut();
+    void signOut();
     navigate("/login");
   };
 

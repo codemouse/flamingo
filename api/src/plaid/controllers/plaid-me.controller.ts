@@ -26,6 +26,8 @@ import {
 } from '@nestjs/swagger';
 import { PlaidService } from '../plaid.service.js';
 import { PlaidItemsService } from '../plaid-items.service.js';
+import { PlaidTransactionsService } from '../plaid-transactions.service.js';
+import { PlaidSyncScheduler } from '../queues/plaid-sync.scheduler.js';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import { PlaidLinkedGuard } from '../guards/plaid-linked.guard.js';
 import { ExchangeTokenDto } from '../dto/exchange-token.dto.js';
@@ -45,6 +47,8 @@ export class PlaidMeController {
   constructor(
     private readonly plaid: PlaidService,
     private readonly items: PlaidItemsService,
+    private readonly transactions: PlaidTransactionsService,
+    private readonly scheduler: PlaidSyncScheduler,
   ) {}
 
   // ── Link token (step 1 of Link flow) ────────────────────────────────────
@@ -144,37 +148,39 @@ export class PlaidMeController {
   @Get('transactions')
   @ApiOperation({
     summary:
-      "Sync the authenticated user's transactions across all linked Items",
+      "Read the authenticated user's persisted transactions and trigger a background sync",
     description:
-      'Uses /transactions/sync (cursor-based). The cursor is persisted per Item. ' +
-      'Returns added + modified transactions from the latest sync.',
+      'Returns transactions stored locally (synced via webhooks + hourly fallback). ' +
+      'Also enqueues a sync job per linked Item so the next read is fresh. ' +
+      'Use ?limit and ?before for pagination.',
   })
-  @ApiOkResponse({
-    description: 'Object with added/modified/removed transaction arrays',
+  @ApiQuery({ name: 'limit', required: false, example: 100 })
+  @ApiQuery({
+    name: 'before',
+    required: false,
+    description: 'ISO date — return transactions with date earlier than this',
   })
-  async getMyTransactions(@Req() req: PlaidRequest) {
+  @ApiOkResponse({ description: 'Array of stored transactions' })
+  async getMyTransactions(
+    @Req() req: PlaidRequest,
+    @Query('limit') limit?: string,
+    @Query('before') before?: string,
+  ) {
     const userItems = await this.items.findByUser(req.user.id);
     if (!userItems.length) return [];
-    const results = await Promise.all(
-      userItems.map(async (item) => {
-        const { added, modified, removed, nextCursor } =
-          await this.plaid.syncTransactions(item.accessToken, item.cursor);
 
-        // Persist the new cursor
-        if (nextCursor) {
-          await this.items.updateCursor(item.id, nextCursor);
-        }
+    // Kick off async refresh — fire-and-forget, callers don't wait.
+    Promise.all(
+      userItems.map((i) => this.scheduler.enqueueItemSync(i.id)),
+    ).catch(() => {
+      /* logged in scheduler */
+    });
 
-        return {
-          itemId: item.itemId,
-          institutionName: item.institutionName,
-          added,
-          modified,
-          removed,
-        };
-      }),
-    );
-    return results;
+    const parsedLimit = limit ? parseInt(limit, 10) : undefined;
+    return this.transactions.findByUser(req.user.id, {
+      limit: Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      before,
+    });
   }
 
   // ── Real-time balance refresh ───────────────────────────────────────────

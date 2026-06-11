@@ -4,7 +4,7 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "transform": {
-    "^.+\\.(t|j)s$": "ts-jest"
+    "^.+\\.(t|j)s$": ["@swc/jest", { "swcrc": true }]
   },
   "setupFiles": ["./setup-env.ts"],
   "globalSetup": "./global-setup.ts",

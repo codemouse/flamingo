@@ -1,43 +1,83 @@
-import { createContext, useContext, useState } from 'react';
-import type { ReactNode } from 'react';
-import type { AuthUser } from '../api/auth';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
+import type { ReactNode } from "react";
+import {
+  logout as apiLogout,
+  me as apiMe,
+  refresh as apiRefresh,
+  type AuthUser,
+} from "../api/auth";
+import { setAccessToken, setUnauthenticatedHandler } from "../api/client";
 
 interface AuthContextValue {
   user: AuthUser | null;
-  token: string | null;
   signIn: (token: string, user: AuthUser) => void;
-  signOut: () => void;
+  signOut: () => Promise<void>;
   isAuthenticated: boolean;
+  isHydrating: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem('access_token'),
-  );
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const raw = localStorage.getItem('user');
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isHydrating, setIsHydrating] = useState(true);
 
-  const signIn = (newToken: string, newUser: AuthUser) => {
-    localStorage.setItem('access_token', newToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
-    setToken(newToken);
-    setUser(newUser);
-  };
+  const signIn = useCallback((token: string, nextUser: AuthUser) => {
+    setAccessToken(token);
+    setUser(nextUser);
+  }, []);
 
-  const signOut = () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    setToken(null);
+  const signOut = useCallback(async () => {
+    try {
+      await apiLogout();
+    } catch {
+      // best-effort
+    }
+    setAccessToken(null);
     setUser(null);
-  };
+  }, []);
+
+  useEffect(() => {
+    setUnauthenticatedHandler(() => setUser(null));
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const tokens = await apiRefresh();
+        if (cancelled) return;
+        setAccessToken(tokens.accessToken);
+        const profile = tokens.user ?? (await apiMe());
+        if (!cancelled) setUser(profile);
+      } catch {
+        if (!cancelled) {
+          setAccessToken(null);
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) setIsHydrating(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <AuthContext.Provider
-      value={{ user, token, signIn, signOut, isAuthenticated: !!token }}
+      value={{
+        user,
+        signIn,
+        signOut,
+        isAuthenticated: !!user,
+        isHydrating,
+      }}
     >
       {children}
     </AuthContext.Provider>
@@ -46,6 +86,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }

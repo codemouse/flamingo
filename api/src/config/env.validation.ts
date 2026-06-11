@@ -26,8 +26,15 @@ export const envValidationSchema = Joi.object({
     .default('dev-only-refresh-secret-change-me'),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
+  // 32-byte key, base64 (44 chars) or hex (64 chars). Required in production.
+  ENCRYPTION_KEY: requiredInProd(
+    Joi.string().pattern(/^([A-Za-z0-9+/=]{43,}|[A-Fa-f0-9]{64})$/),
+  ).default('ZGV2LW9ubHktMzItYnl0ZS1rZXktY2hhbmdlLW5vdyE='),
+
   WEB_ORIGIN: Joi.string().uri().default('http://localhost:5173'),
   COOKIE_DOMAIN: Joi.string().optional().allow(''),
+
+  REDIS_URL: Joi.string().uri().optional().allow(''),
 
   PLAID_CLIENT_ID: requiredInProd(Joi.string()),
   PLAID_SECRET: requiredInProd(Joi.string()),

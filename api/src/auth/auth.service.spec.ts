@@ -2,14 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import * as bcrypt from 'bcrypt';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { PasswordService } from '../users/password.service';
 import { RefreshTokensService } from './refresh-tokens.service';
 import { User, Role } from '../users/entities/user.entity';
-
-jest.mock('bcrypt');
-const mockBcrypt = bcrypt as jest.Mocked<typeof bcrypt>;
 
 const makeUser = (overrides: Partial<User> = {}): User => ({
   id: 'uuid-1',
@@ -27,6 +24,7 @@ describe('AuthService', () => {
   let users: jest.Mocked<UsersService>;
   let jwt: jest.Mocked<JwtService>;
   let refresh: jest.Mocked<RefreshTokensService>;
+  let passwords: jest.Mocked<PasswordService>;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -38,6 +36,7 @@ describe('AuthService', () => {
             create: jest.fn(),
             findByUsername: jest.fn(),
             findById: jest.fn(),
+            updatePasswordHash: jest.fn(),
           },
         },
         {
@@ -51,6 +50,7 @@ describe('AuthService', () => {
               .fn()
               .mockResolvedValue({ raw: 'mock-refresh', row: { id: 'rt-1' } }),
             findActiveByRawToken: jest.fn(),
+            findByRawToken: jest.fn(),
             revoke: jest.fn(),
             revokeAllForUser: jest.fn(),
           },
@@ -61,6 +61,13 @@ describe('AuthService', () => {
             get: jest.fn((k: string, fallback?: unknown) => fallback),
           },
         },
+        {
+          provide: PasswordService,
+          useValue: {
+            hash: jest.fn().mockResolvedValue('new-argon2-hash'),
+            verify: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -68,6 +75,7 @@ describe('AuthService', () => {
     users = module.get(UsersService);
     jwt = module.get(JwtService);
     refresh = module.get(RefreshTokensService);
+    passwords = module.get(PasswordService);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -93,14 +101,11 @@ describe('AuthService', () => {
   describe('login', () => {
     it('returns accessToken, refreshToken and safe user on valid credentials', async () => {
       users.findByUsername.mockResolvedValue(makeUser());
-      mockBcrypt.compare.mockResolvedValue(true as never);
+      passwords.verify.mockResolvedValue({ valid: true, needsRehash: false });
 
       const result = await service.login('alice', 'password123');
 
-      expect(mockBcrypt.compare).toHaveBeenCalledWith(
-        'password123',
-        'hashed-pw',
-      );
+      expect(passwords.verify).toHaveBeenCalledWith('password123', 'hashed-pw');
       expect(jwt.sign).toHaveBeenCalledWith(
         expect.objectContaining({ sub: 'uuid-1', username: 'alice' }),
       );
@@ -108,6 +113,19 @@ describe('AuthService', () => {
       expect(result.accessToken).toBe('mock-jwt-token');
       expect(result.refreshToken).toBe('mock-refresh');
       expect(result.user).not.toHaveProperty('passwordHash');
+    });
+
+    it('opportunistically re-hashes legacy bcrypt passwords', async () => {
+      users.findByUsername.mockResolvedValue(makeUser());
+      passwords.verify.mockResolvedValue({ valid: true, needsRehash: true });
+
+      await service.login('alice', 'password123');
+
+      expect(passwords.hash).toHaveBeenCalledWith('password123');
+      expect(users.updatePasswordHash).toHaveBeenCalledWith(
+        'uuid-1',
+        'new-argon2-hash',
+      );
     });
 
     it('throws UnauthorizedException when user is not found', async () => {
@@ -121,7 +139,7 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException on wrong password', async () => {
       users.findByUsername.mockResolvedValue(makeUser());
-      mockBcrypt.compare.mockResolvedValue(false as never);
+      passwords.verify.mockResolvedValue({ valid: false, needsRehash: false });
       await expect(service.login('alice', 'wrong')).rejects.toThrow(
         UnauthorizedException,
       );
@@ -133,25 +151,54 @@ describe('AuthService', () => {
   // ---------------------------------------------------------------------------
   describe('refresh', () => {
     it('rotates the refresh token and issues a new pair', async () => {
-      refresh.findActiveByRawToken.mockResolvedValue({
+      refresh.findByRawToken.mockResolvedValue({
         id: 'rt-old',
         userId: 'uuid-1',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
       } as never);
       users.findById.mockResolvedValue(makeUser());
 
       const result = await service.refresh('old-raw-token');
 
-      expect(refresh.findActiveByRawToken).toHaveBeenCalledWith(
-        'old-raw-token',
-      );
+      expect(refresh.findByRawToken).toHaveBeenCalledWith('old-raw-token');
       expect(refresh.revoke).toHaveBeenCalledWith('rt-old');
       expect(result.accessToken).toBe('mock-jwt-token');
       expect(result.refreshToken).toBe('mock-refresh');
     });
 
     it('throws UnauthorizedException for invalid refresh token', async () => {
-      refresh.findActiveByRawToken.mockResolvedValue(null);
+      refresh.findByRawToken.mockResolvedValue(null);
       await expect(service.refresh('bad')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(refresh.revoke).not.toHaveBeenCalled();
+    });
+
+    it('detects reuse and revokes entire family when token is already revoked', async () => {
+      refresh.findByRawToken.mockResolvedValue({
+        id: 'rt-revoked',
+        userId: 'uuid-1',
+        revokedAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+      } as never);
+
+      await expect(service.refresh('replay-attempt')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(refresh.revokeAllForUser).toHaveBeenCalledWith('uuid-1');
+      expect(refresh.issue).not.toHaveBeenCalled();
+    });
+
+    it('throws when refresh token is expired', async () => {
+      refresh.findByRawToken.mockResolvedValue({
+        id: 'rt-old',
+        userId: 'uuid-1',
+        revokedAt: null,
+        expiresAt: new Date(Date.now() - 1000),
+      } as never);
+
+      await expect(service.refresh('expired')).rejects.toThrow(
         UnauthorizedException,
       );
       expect(refresh.revoke).not.toHaveBeenCalled();

@@ -1,6 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import cookieParser from 'cookie-parser';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
+import cookie from '@fastify/cookie';
+import compress from '@fastify/compress';
+import etag from '@fastify/etag';
 import { AppModule } from '../../src/app.module';
 import { PlaidService } from '../../src/plaid/plaid.service';
 
@@ -69,9 +75,15 @@ export async function createTestApp(): Promise<INestApplication> {
     .useValue(mockPlaidService)
     .compile();
 
-  const app = moduleFixture.createNestApplication();
-  app.use(cookieParser());
+  const app = moduleFixture.createNestApplication<NestFastifyApplication>(
+    new FastifyAdapter({ trustProxy: true }),
+    { rawBody: true },
+  );
+  await app.register(cookie);
+  await app.register(compress, { threshold: 1024 });
+  await app.register(etag, { algorithm: 'fnv1a' });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   await app.init();
+  await app.getHttpAdapter().getInstance().ready();
   return app;
 }

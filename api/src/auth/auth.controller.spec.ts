@@ -15,7 +15,7 @@ const mockUser = {
 };
 
 const makeRes = () => ({
-  cookie: jest.fn(),
+  setCookie: jest.fn(),
   clearCookie: jest.fn(),
 });
 const makeReq = (overrides: Record<string, unknown> = {}) => ({
@@ -104,7 +104,7 @@ describe('AuthController', () => {
         expect.any(Object),
       );
       expect(result.accessToken).toBe('mock-token');
-      expect(res.cookie).toHaveBeenCalledTimes(2);
+      expect(res.setCookie).toHaveBeenCalledTimes(2);
     });
   });
 

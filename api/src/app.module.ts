@@ -2,12 +2,17 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import { Redis } from 'ioredis';
+import { APP_GUARD, APP_INTERCEPTOR, Reflector } from '@nestjs/core';
+import { ClassSerializerInterceptor } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PlaidModule } from './plaid/plaid.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
+import { HealthController } from './health/health.controller';
 import { envValidationSchema } from './config/env.validation';
 
 @Module({
@@ -58,11 +63,29 @@ import { envValidationSchema } from './config/env.validation';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const isTest = config.get<string>('NODE_ENV') === 'test';
+        const env = config.get<string>('NODE_ENV');
+        const isTest = env === 'test';
+        const redisUrl = config.get<string>('REDIS_URL');
+
+        // Redis-backed storage in non-test environments when REDIS_URL is set.
+        // Falls back to the default in-memory storage otherwise (single-replica
+        // dev / tests).
+        const storage =
+          !isTest && redisUrl
+            ? new ThrottlerStorageRedisService(new Redis(redisUrl))
+            : undefined;
+
         return {
           throttlers: [
             { name: 'default', ttl: 60_000, limit: isTest ? 100_000 : 100 },
+            // Stricter named throttler used by /auth routes via
+            // `@Throttle({ auth: { limit, ttl } })`.
+            { name: 'auth', ttl: 60_000, limit: 10 },
           ],
+          // Globally bypass throttling in tests; per-route @Throttle() overrides
+          // would otherwise still kick in regardless of module-level limits.
+          skipIf: () => isTest,
+          ...(storage ? { storage } : {}),
         };
       },
     }),
@@ -85,7 +108,22 @@ import { envValidationSchema } from './config/env.validation';
     UsersModule,
     AuthModule,
     AdminModule,
+    ScheduleModule.forRoot(),
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  controllers: [HealthController],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Strips fields marked with `@Exclude({ toPlainOnly: true })` (e.g.
+    // password_hash, access_token, token_hash) from any entity returned by a
+    // controller. Defence in depth on top of explicit DTOs.
+    {
+      provide: APP_INTERCEPTOR,
+      useFactory: (reflector: Reflector) =>
+        new ClassSerializerInterceptor(reflector, {
+          excludeExtraneousValues: false,
+        }),
+      inject: [Reflector],
+    },
+  ],
 })
 export class AppModule {}

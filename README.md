@@ -54,6 +54,8 @@ npm run dev
 npm run api          # NestJS (watch mode)
 npm run web          # Vite dev server for web/
 npm run db:migrate --workspace=api   # apply api/schema/*.sql idempotently
+npm run db:encrypt-tokens --workspace=api   # one-shot: encrypt any plaintext access_tokens
+npm run generate:api-types --workspace=web  # regenerate web/src/api/generated/schema.d.ts from Swagger
 ```
 
 Or from within each workspace:
@@ -98,6 +100,18 @@ PLAID_SANDBOX_INSTITUTIONS=ins_109508,ins_3,ins_4   # institutions for sandbox-c
 # ── JWT ──────────────────────────────────────────────────────────────────────
 JWT_SECRET=change-me-use-a-long-random-string   # min 32 chars in production
 JWT_EXPIRES_IN=7d
+
+# ── Encryption ──────────────────────────────────────────────────────────────
+# Used to encrypt sensitive at-rest values (e.g. plaid_items.access_token).
+# 32 bytes, base64-encoded preferred (hex 64-char also accepted).
+# Generate one with:  openssl rand -base64 32
+ENCRYPTION_KEY=ZGV2LW9ubHktMzItYnl0ZS1rZXktY2hhbmdlLW5vdyE=   # dev placeholder — REPLACE in any non-dev environment
+
+# ── Redis (optional) ─────────────────────────────────────────────────────────
+# Required to use the distributed throttler and the BullMQ-backed Plaid sync
+# queue. If unset, throttler falls back to in-memory and queue jobs are
+# silently dropped (the hourly cron fallback still runs).
+REDIS_URL=redis://localhost:6379
 ```
 
 > **Never commit `.env` files.** They are git-ignored. Use environment-specific secrets managers (AWS Secrets Manager, GitHub Actions secrets, etc.) in CI/CD.
@@ -162,6 +176,12 @@ flamingo/
 
 The API self-documents via Swagger UI at **[http://localhost:3000/api/docs](http://localhost:3000/api/docs)** when running locally.
 
+### Health (`/health`)
+
+| Method | Path      | Auth | Description                                             |
+| ------ | --------- | ---- | ------------------------------------------------------- |
+| `GET`  | `/health` | —    | Liveness probe, returns `{ status, uptime, timestamp }` |
+
 ### Auth (`/auth`)
 
 | Method | Path             | Auth | Description                             |
@@ -181,7 +201,7 @@ All require a valid user JWT.
 | `GET`    | `/plaid/me/items`                    | List this user's linked Plaid Items (access token omitted)                                     |
 | `GET`    | `/plaid/me/accounts`                 | Aggregate accounts across all linked Items                                                     |
 | `POST`   | `/plaid/me/balance/refresh`          | Force-refresh real-time balances (Plaid `/accounts/balance/get`)                               |
-| `GET`    | `/plaid/me/transactions`             | Sync transactions for all Items (cursor-based)                                                 |
+| `GET`    | `/plaid/me/transactions`             | Read persisted transactions; enqueues a background sync per Item. Optional `?limit=&before=`   |
 | `GET`    | `/plaid/me/auth`                     | ACH routing & account numbers (requires `auth` product)                                        |
 | `GET`    | `/plaid/me/identity`                 | Account holder names, emails, phones, addresses (`identity` product)                           |
 | `GET`    | `/plaid/me/liabilities`              | Credit cards, student loans, mortgages (`liabilities` product)                                 |
@@ -233,10 +253,12 @@ Require **admin** JWT.
 
 ### Schema
 
-| Table         | Purpose                                                                    |
-| ------------- | -------------------------------------------------------------------------- |
-| `users`       | User accounts with role and email                                          |
-| `plaid_items` | One row per linked Plaid Item per user (access token, institution, cursor) |
+| Table                | Purpose                                                                              |
+| -------------------- | ------------------------------------------------------------------------------------ |
+| `users`              | User accounts with role and email                                                    |
+| `plaid_items`        | One row per linked Plaid Item per user (encrypted access token, institution, cursor) |
+| `plaid_transactions` | Persisted transactions synced from Plaid via webhooks + hourly fallback              |
+| `refresh_tokens`     | Hashed refresh tokens for the rotating-refresh auth flow                             |
 
 ### Setup
 
@@ -252,12 +274,12 @@ createdb flamingo_test
 
 SQL migration files live in `api/schema/`. They are numbered sequentially (`001_`, `002_`, …) and are idempotent (all use `IF NOT EXISTS` / `IF EXISTS` guards).
 
-TypeORM `synchronize: true` is enabled in non-production environments, so schema changes from entity files are applied automatically on startup in development.
+TypeORM `synchronize` is **disabled in every environment**. Schema changes are applied via the numbered SQL files in `api/schema/` — entity files are read-only consumers of the schema, never the source of truth.
 
-### Docker (PostgreSQL only)
+### Docker (PostgreSQL + Redis)
 
 ```bash
-docker compose up -d   # starts postgres:16-alpine on port 5432
+docker compose up -d   # starts postgres:16-alpine on 5432 and redis:7-alpine on 6379
 ```
 
 ---

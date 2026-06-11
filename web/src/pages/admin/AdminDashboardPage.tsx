@@ -29,7 +29,7 @@ export default function AdminDashboardPage() {
   };
 
   const handleLogout = () => {
-    signOut();
+    void signOut();
     navigate("/login");
   };
 

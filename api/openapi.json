@@ -1,0 +1,985 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/plaid/me/link-token": {
+      "post": {
+        "description": "Returns a short-lived link_token. Pass it to the Plaid Link component on the frontend.",
+        "operationId": "PlaidMeController_createLinkToken",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "link_token string"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a Plaid link_token to initialise Plaid Link",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/exchange-token": {
+      "post": {
+        "description": "Call this after Plaid Link calls onSuccess with a public_token. The backend exchanges it for an access_token, persists the Item, and returns the Item record.",
+        "operationId": "PlaidMeController_exchangeToken",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created Plaid Item (without access_token)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Exchange a public_token for a permanent access_token (Plaid Item)",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/items": {
+      "get": {
+        "operationId": "PlaidMeController_getMyItems",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of Plaid Items (access_token omitted)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List the authenticated user's linked Plaid Items",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/accounts": {
+      "get": {
+        "operationId": "PlaidMeController_getMyAccounts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of Plaid AccountBase objects"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the authenticated user's accounts across all linked Items",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/transactions": {
+      "get": {
+        "description": "Returns transactions stored locally (synced via webhooks + hourly fallback). Also enqueues a sync job per linked Item so the next read is fresh. Use ?limit and ?before for pagination.",
+        "operationId": "PlaidMeController_getMyTransactions",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 100,
+              "type": "string"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "ISO date — return transactions with date earlier than this",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of stored transactions"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Read the authenticated user's persisted transactions and trigger a background sync",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/balance/refresh": {
+      "post": {
+        "description": "Calls /accounts/balance/get for each Item, which polls the institution for the latest available/current balances. More expensive than GET /plaid/me/accounts (which uses cached data). Use sparingly.",
+        "operationId": "PlaidMeController_refreshBalances",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of accounts with refreshed balances"
+          },
+          "403": {
+            "description": "No Plaid account linked"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Force a real-time balance refresh across all linked Items",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/auth": {
+      "get": {
+        "description": "Calls /auth/get for each Item. Requires the auth product to be enabled on the Item. In sandbox the default test institution returns deterministic numbers.",
+        "operationId": "PlaidMeController_getMyAuth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of per-item auth payloads (accounts + numbers)"
+          },
+          "403": {
+            "description": "No Plaid account linked"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get routing and account numbers for the user's linked accounts",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/identity": {
+      "get": {
+        "description": "Calls /identity/get for each Item. Requires the identity product to be enabled on the Item.",
+        "operationId": "PlaidMeController_getMyIdentity",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of per-item identity payloads"
+          },
+          "403": {
+            "description": "No Plaid account linked"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get account holder names, emails, phones, and addresses",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/liabilities": {
+      "get": {
+        "description": "Calls /liabilities/get for each Item. Returns null per-item if the Item does not support liabilities.",
+        "operationId": "PlaidMeController_getMyLiabilities",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of per-item liabilities payloads"
+          },
+          "403": {
+            "description": "No Plaid account linked"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get liability details (credit cards, student loans, mortgages)",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/investments/holdings": {
+      "get": {
+        "description": "Calls /investments/holdings/get for each Item. Returns null per-item if the Item does not support investments.",
+        "operationId": "PlaidMeController_getMyHoldings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of per-item holdings payloads"
+          },
+          "403": {
+            "description": "No Plaid account linked"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get investment account holdings (positions and securities)",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/investments/transactions": {
+      "get": {
+        "description": "Calls /investments/transactions/get for each Item. Both startDate and endDate must be ISO YYYY-MM-DD. Defaults to the last 90 days.",
+        "operationId": "PlaidMeController_getMyInvestmentTransactions",
+        "parameters": [
+          {
+            "name": "startDate",
+            "required": false,
+            "in": "query",
+            "description": "YYYY-MM-DD",
+            "schema": {
+              "example": "2024-01-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "endDate",
+            "required": false,
+            "in": "query",
+            "description": "YYYY-MM-DD",
+            "schema": {
+              "example": "2024-04-01",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of per-item investment transactions payloads"
+          },
+          "403": {
+            "description": "No Plaid account linked"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get investment transactions for a date range",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/me/items/{id}": {
+      "delete": {
+        "description": "Calls /item/remove on Plaid then deletes the Item from Flamingo. The `id` parameter is the Flamingo UUID of the PlaidItem record.",
+        "operationId": "PlaidMeController_removeItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Item removed successfully"
+          },
+          "403": {
+            "description": "No Plaid account linked"
+          },
+          "404": {
+            "description": "Item not found or does not belong to this user"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Unlink a Plaid Item (disconnect a bank)",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/sandbox/create-item": {
+      "post": {
+        "description": "Calls /sandbox/public_token/create then exchanges it — the same result as going through Plaid Link with user_good / pass_good. Useful for automated tests and local development. Disabled in production.",
+        "operationId": "PlaidSandboxController_createSandboxItem",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSandboxItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created PlaidItem record (access_token omitted)"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a sandbox Plaid Item for the current user (bypasses Link UI)",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/sandbox/accounts": {
+      "get": {
+        "description": "Returns accounts from a service-level sandbox access_token. Does NOT require the user to have their own linked Item.",
+        "operationId": "PlaidSandboxController_sandboxAccounts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of Plaid AccountBase objects"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get demo accounts from a shared sandbox Item",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/sandbox/transactions": {
+      "get": {
+        "description": "Returns added transactions from a service-level sandbox sync. Does NOT require the user to have their own linked Item.",
+        "operationId": "PlaidSandboxController_sandboxTransactions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of Plaid Transaction objects"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get demo transactions from a shared sandbox Item",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/sandbox/items/{id}/reset-login": {
+      "post": {
+        "description": "Wraps /sandbox/item/reset_login. Useful for testing Plaid Link update mode flows. Sandbox-only.",
+        "operationId": "PlaidSandboxController_resetLogin",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ resetLogin: true } when successful"
+          },
+          "403": {
+            "description": "Item does not belong to this user"
+          },
+          "404": {
+            "description": "Item not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Force ITEM_LOGIN_REQUIRED on a sandbox Item",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/sandbox/items/{id}/fire-webhook": {
+      "post": {
+        "description": "Wraps /sandbox/item/fire_webhook. Allows you to simulate webhook events (SYNC_UPDATES_AVAILABLE, NEW_ACCOUNTS_AVAILABLE, USER_PERMISSION_REVOKED, etc.). Requires PLAID_WEBHOOK_URL configured on the Item. Sandbox-only.",
+        "operationId": "PlaidSandboxController_fireWebhook",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FireWebhookDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ webhookFired: true } when delivery was simulated"
+          },
+          "403": {
+            "description": "Item does not belong to this user"
+          },
+          "404": {
+            "description": "Item not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Fire a test webhook for a sandbox Item",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/sandbox/items/{id}/transactions": {
+      "post": {
+        "description": "Wraps /sandbox/transactions/create. Adds up to 10 custom transactions. Only works for Items created with the user_transactions_dynamic test user. Sandbox-only.",
+        "operationId": "PlaidSandboxController_createTransactions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSandboxTransactionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Transactions queued for the next /transactions/sync"
+          },
+          "403": {
+            "description": "Item does not belong to this user"
+          },
+          "404": {
+            "description": "Item not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Inject custom transactions into a sandbox Item",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/items": {
+      "get": {
+        "description": "Returns every PlaidItem record; access_token is omitted.",
+        "operationId": "PlaidAdminController_getAllItems",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of PlaidItem records (access_token omitted)"
+          },
+          "401": {
+            "description": "Missing or invalid JWT"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "admin-jwt": []
+          }
+        ],
+        "summary": "List all Plaid Items across all users (admin only)",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/items/{id}": {
+      "delete": {
+        "description": "Calls /item/remove on Plaid (best-effort) and deletes the record from Flamingo. The `id` parameter is the Flamingo UUID of the PlaidItem record.",
+        "operationId": "PlaidAdminController_removeItem",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Flamingo PlaidItem UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Item removed successfully"
+          },
+          "401": {
+            "description": "Missing or invalid JWT"
+          },
+          "403": {
+            "description": "Admin role required"
+          },
+          "404": {
+            "description": "PlaidItem not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "admin-jwt": []
+          }
+        ],
+        "summary": "Force-remove a Plaid Item (admin only)",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/institutions/search": {
+      "get": {
+        "description": "Authenticated wrapper around /institutions/search. Useful for displaying an institution picker in the UI before opening Plaid Link.",
+        "operationId": "PlaidInstitutionsController_search",
+        "parameters": [
+          {
+            "name": "query",
+            "required": true,
+            "in": "query",
+            "description": "Search term (min 2 chars)",
+            "schema": {
+              "example": "chase",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of matching institutions"
+          },
+          "400": {
+            "description": "Missing or too-short query"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Search Plaid-supported financial institutions by name",
+        "tags": ["plaid"]
+      }
+    },
+    "/plaid/webhook": {
+      "post": {
+        "operationId": "PlaidWebhookController_handle",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Webhook accepted"
+          },
+          "401": {
+            "description": "Signature missing or invalid (production)"
+          }
+        },
+        "summary": "Receive a Plaid webhook event",
+        "tags": ["plaid-webhook"]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created successfully"
+          },
+          "409": {
+            "description": "Username already taken"
+          }
+        },
+        "summary": "Register a new user",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns accessToken and user profile"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        },
+        "summary": "Log in; sets httpOnly cookies and also returns accessToken",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns new accessToken"
+          },
+          "401": {
+            "description": "Invalid or expired refresh token"
+          }
+        },
+        "summary": "Rotate refresh token (reads cookie or body) and issue a new access token",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "204": {
+            "description": "Logged out"
+          }
+        },
+        "summary": "Revoke refresh token and clear auth cookies",
+        "tags": ["auth"]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Current user profile from JWT"
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get the currently authenticated user",
+        "tags": ["auth"]
+      }
+    },
+    "/admin/users": {
+      "get": {
+        "operationId": "AdminController_getAllUsers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of all users; passwordHash is omitted"
+          },
+          "401": {
+            "description": "Missing or invalid JWT"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "security": [
+          {
+            "admin-jwt": []
+          }
+        ],
+        "summary": "List all Flamingo users (admin only)",
+        "tags": ["admin"]
+      }
+    },
+    "/admin/users/{id}": {
+      "patch": {
+        "description": "Partially updates a user. All fields are optional — send only what needs to change. Pass `null` to clear `email`.",
+        "operationId": "AdminController_updateUser",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "User UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserAdminDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated user object; passwordHash is omitted"
+          },
+          "401": {
+            "description": "Missing or invalid JWT"
+          },
+          "403": {
+            "description": "Admin role required"
+          },
+          "404": {
+            "description": "User not found"
+          }
+        },
+        "security": [
+          {
+            "admin-jwt": []
+          }
+        ],
+        "summary": "Update a user (admin only)",
+        "tags": ["admin"]
+      }
+    },
+    "/admin/sandbox-pool": {
+      "get": {
+        "operationId": "AdminController_getSandboxPool",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of sandbox institution ID strings"
+          },
+          "401": {
+            "description": "Missing or invalid JWT"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "security": [
+          {
+            "admin-jwt": []
+          }
+        ],
+        "summary": "List configured Plaid sandbox institution IDs (admin only)",
+        "tags": ["admin"]
+      }
+    }
+  },
+  "info": {
+    "title": "Flamingo API",
+    "description": "Flamingo REST API",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
+      "admin-jwt": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "ExchangeTokenDto": {
+        "type": "object",
+        "properties": {
+          "publicToken": {
+            "type": "string",
+            "description": "The public_token returned by Plaid Link onSuccess callback",
+            "example": "public-sandbox-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          }
+        },
+        "required": ["publicToken"]
+      },
+      "CreateSandboxItemDto": {
+        "type": "object",
+        "properties": {
+          "institutionId": {
+            "type": "string",
+            "description": "Plaid institution ID to use for the sandbox Item",
+            "example": "ins_109508"
+          }
+        }
+      },
+      "FireWebhookDto": {
+        "type": "object",
+        "properties": {
+          "webhookCode": {
+            "type": "string",
+            "description": "The webhook code to simulate. Common values include SYNC_UPDATES_AVAILABLE, NEW_ACCOUNTS_AVAILABLE, USER_PERMISSION_REVOKED.",
+            "enum": [
+              "DEFAULT_UPDATE",
+              "NEW_ACCOUNTS_AVAILABLE",
+              "SMS_MICRODEPOSITS_VERIFICATION",
+              "AUTHORIZATION_GRANTED",
+              "USER_PERMISSION_REVOKED",
+              "USER_ACCOUNT_REVOKED",
+              "PENDING_DISCONNECT",
+              "RECURRING_TRANSACTIONS_UPDATE",
+              "LOGIN_REPAIRED",
+              "SYNC_UPDATES_AVAILABLE",
+              "PRODUCT_READY",
+              "ERROR"
+            ],
+            "example": "SYNC_UPDATES_AVAILABLE"
+          }
+        },
+        "required": ["webhookCode"]
+      },
+      "SandboxTransactionDto": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number",
+            "description": "Amount (positive = outflow, negative = inflow)",
+            "example": 12.34
+          },
+          "date_transacted": {
+            "type": "string",
+            "description": "Transaction date (YYYY-MM-DD, today or up to 14 days ago)",
+            "example": "2026-06-01"
+          },
+          "date_posted": {
+            "type": "string",
+            "description": "Posted date (YYYY-MM-DD, today or up to 14 days ago)",
+            "example": "2026-06-01"
+          },
+          "description": {
+            "type": "string",
+            "description": "Transaction description",
+            "example": "Tim Hortons"
+          },
+          "iso_currency_code": {
+            "type": "string",
+            "description": "ISO-4217 currency, defaults to USD",
+            "example": "USD"
+          }
+        },
+        "required": ["amount", "date_transacted", "date_posted", "description"]
+      },
+      "CreateSandboxTransactionsDto": {
+        "type": "object",
+        "properties": {
+          "transactions": {
+            "description": "Up to 10 custom transactions to inject into a sandbox Item.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SandboxTransactionDto"
+            }
+          }
+        },
+        "required": ["transactions"]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "example": "alice",
+            "minLength": 3,
+            "maxLength": 150
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure!Pass",
+            "minLength": 8
+          },
+          "email": {
+            "type": "string",
+            "example": "alice@example.com"
+          }
+        },
+        "required": ["username", "password"]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "example": "alice"
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure!Pass"
+          }
+        },
+        "required": ["username", "password"]
+      },
+      "UpdateUserAdminDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": ["user", "admin"],
+            "description": "Promote or demote the user's role",
+            "example": "admin"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true,
+            "description": "Update the user's email address; pass null to clear it",
+            "example": "alice@example.com"
+          }
+        }
+      }
+    }
+  }
+}

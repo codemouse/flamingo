@@ -16,6 +16,7 @@ These rules apply to every change made in this repository. Follow them automatic
 ## 1. Schema Maintenance
 
 ### Triggers
+
 Update `api/schema/` whenever ANY of the following happens:
 
 - A `@Column`, `@PrimaryGeneratedColumn`, `@CreateDateColumn`, or `@UpdateDateColumn` is added, renamed, removed, or its options change (type, length, nullable, default, unique)
@@ -26,11 +27,12 @@ Update `api/schema/` whenever ANY of the following happens:
 ### Required actions
 
 1. **Incremental migration file** — create `api/schema/00N_<snake_case_description>.sql` (next available number) with the exact DDL needed (`ALTER TABLE`, `CREATE INDEX`, `DROP CONSTRAINT`, `ADD COLUMN`, etc.).
-2. **Baseline sync** — ensure `api/schema/001_create_users.sql` (and any other full-table baseline files) reflect the *current* state of the entity. If a column was dropped, remove it; if a constraint was added, add it.
+2. **Baseline sync** — ensure `api/schema/001_create_users.sql` (and any other full-table baseline files) reflect the _current_ state of the entity. If a column was dropped, remove it; if a constraint was added, add it.
 3. **Seed data** — if the change affects existing seed rows (new NOT NULL column, renamed column, etc.), update or create a file in `api/schema/data/`.
 4. **Comment in the SQL file** — include a one-line comment at the top explaining the reason for the change and the corresponding entity field.
 
 ### Schema file conventions
+
 - Files are numbered sequentially; never renumber or modify a file once it has been applied to any environment.
 - Use `IF NOT EXISTS` / `IF EXISTS` guards so files are idempotent.
 - Always qualify the table name; never rely on a `SET search_path`.
@@ -40,6 +42,7 @@ Update `api/schema/` whenever ANY of the following happens:
 ## 2. Test Maintenance
 
 ### Triggers
+
 Create or update tests whenever ANY of the following happens:
 
 - A new service method is added or an existing one changes its behavior
@@ -67,6 +70,7 @@ Create or update tests whenever ANY of the following happens:
 4. **Verify** — run `npm run test` and `npm run test:e2e` from `api/` before finalising any change.
 
 ### Test conventions
+
 - Unit tests mock all external dependencies (TypeORM repositories, JwtService, ConfigService, bcrypt, YodleeService).
 - E2E tests use the `flamingo_test` database (see `api/.env.test`). Run `createdb flamingo_test` once to create it.
 - Each e2e test file cleans up its own data in `afterAll`.
@@ -78,7 +82,7 @@ Create or update tests whenever ANY of the following happens:
 ## 3. General Conventions
 
 - SQL migration numbers are sequential (`001`, `002`, …) and gap-free.
-- TypeORM `synchronize: true` is only enabled for `NODE_ENV !== 'production'`.
+- TypeORM `synchronize` is **disabled in every environment** — SQL migration files in `api/schema/` are the authoritative source of truth. Apply them with `npm run db:migrate --workspace=api`.
 - All new endpoints must have a corresponding `@ApiOperation` Swagger annotation.
 - Admin-only endpoints must use the `@AdminOnly()` composed decorator (not manual guard composition).
 - User-scoped Yodlee endpoints live under `/yodlee/me/` and resolve `yodleeLoginName` from the authenticated user — never accept `loginName` as a query param for user-facing routes.
@@ -88,6 +92,7 @@ Create or update tests whenever ANY of the following happens:
 ## 4. Swagger & Metadata
 
 ### Triggers
+
 Update Swagger decorators and DTO metadata whenever ANY of the following happens:
 
 - A field is added, renamed, removed, or its type / nullability changes in a DTO
@@ -112,6 +117,7 @@ Update Swagger decorators and DTO metadata whenever ANY of the following happens
 ## 5. README Maintenance
 
 ### Triggers
+
 Update `README.md` (repo root) whenever ANY of the following happens:
 
 - A new API endpoint is added, removed, renamed, or its method/path/auth requirement changes

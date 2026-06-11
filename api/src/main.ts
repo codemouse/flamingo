@@ -1,29 +1,33 @@
 import { NestFactory } from '@nestjs/core';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
-import helmet from 'helmet';
-import cookieParser from 'cookie-parser';
-import { json } from 'express';
+import helmet from '@fastify/helmet';
+import cookie from '@fastify/cookie';
+import compress from '@fastify/compress';
+import etag from '@fastify/etag';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter({
+      trustProxy: true,
+      bodyLimit: 1_048_576,
+    }),
+    { bufferLogs: true, rawBody: true },
+  );
 
   app.useLogger(app.get(Logger));
-  app.use(helmet());
-  app.use(cookieParser());
-
-  // Capture raw body on the Plaid webhook route so we can verify the signature.
-  app.use(
-    json({
-      verify: (req: { rawBody?: Buffer; url?: string }, _res, buf) => {
-        if (req.url?.startsWith('/plaid/webhook')) {
-          req.rawBody = Buffer.from(buf);
-        }
-      },
-    }),
-  );
+  await app.register(helmet);
+  await app.register(cookie);
+  // Skip very small payloads — overhead beats savings.
+  await app.register(compress, { threshold: 1024 });
+  await app.register(etag, { algorithm: 'fnv1a' });
 
   const webOrigin = process.env.WEB_ORIGIN ?? 'http://localhost:5173';
   app.enableCors({
@@ -61,6 +65,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
-bootstrap();
+void bootstrap();
